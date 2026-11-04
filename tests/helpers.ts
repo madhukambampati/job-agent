@@ -12,16 +12,20 @@ if (!process.env.JOB_AGENT_CHROME_PATH && existsSync("/usr/bin/google-chrome")) 
 /** Fake model: each tool name maps to a canned response (or a function of the prompt). */
 export class FakeLLM implements LLM {
   calls: { tool: string; prompt: string }[] = [];
-  constructor(private responses: Record<string, unknown | ((prompt: string) => unknown)>, private researchText = "## What they do\nTest co.") {}
+  constructor(
+    private responses: Record<string, unknown | ((prompt: string) => unknown)>,
+    private researchText: string | ((prompt: string) => string) = "## What they do\nTest co.",
+  ) {}
   async structured<T>(req: StructuredRequest<T>): Promise<T> {
     this.calls.push({ tool: req.toolName, prompt: req.prompt });
     const r = this.responses[req.toolName];
     if (r === undefined) throw new Error(`FakeLLM: no response for ${req.toolName}`);
     return req.schema.parse(typeof r === "function" ? (r as (p: string) => unknown)(req.prompt) : r);
   }
-  async research(): Promise<ResearchResult> {
-    this.calls.push({ tool: "research", prompt: "" });
-    return { text: this.researchText, sources: [{ title: "Example news", url: "https://example.com/news" }] };
+  async research(req: { prompt: string }): Promise<ResearchResult> {
+    this.calls.push({ tool: "research", prompt: req.prompt });
+    const text = typeof this.researchText === "function" ? this.researchText(req.prompt) : this.researchText;
+    return { text, sources: [{ title: "Example news", url: "https://example.com/news" }] };
   }
 }
 

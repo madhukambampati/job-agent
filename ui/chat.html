@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>job-agent</title>
+<style>
+  :root {
+    --ink: #14213d; --navy: #1F3864; --muted: #5b6475; --line: #e1e4ea; --paper: #f6f4ef; --card: #fff;
+    --amber: #b06c06; --amber-bg: #fdf3e1; --green: #1f7a4d; --green-bg: #e5f4ec; --red: #b4232c; --red-bg: #fbe9ea; --blue-bg: #e8eef9;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body { margin: 0; font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, sans-serif; color: var(--ink); background: var(--paper); display: flex; flex-direction: column; }
+  header { background: var(--navy); color: #fff; padding: 12px 20px; display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+  header h1 { margin: 0; font-size: 17px; }
+  header .chips { margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .chip { font-size: 12px; padding: 3px 10px; border-radius: 99px; background: rgba(255,255,255,.14); color: #fff; text-decoration: none; }
+  .chip.warn { background: #b4232c; }
+  #feed { flex: 1; overflow-y: auto; padding: 24px 16px 180px; }
+  .wrap { max-width: 860px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
+  .msg { display: flex; }
+  .msg.me { justify-content: flex-end; }
+  .bubble { max-width: 85%; padding: 10px 14px; border-radius: 14px; background: var(--card); border: 1px solid var(--line); }
+  .me .bubble { background: var(--navy); color: #fff; border-color: var(--navy); border-bottom-right-radius: 4px; }
+  .bot .bubble { border-bottom-left-radius: 4px; width: 100%; max-width: 100%; }
+  .status { color: var(--muted); font-size: 13px; display: flex; align-items: center; gap: 8px; }
+  .spin { width: 12px; height: 12px; border: 2px solid var(--line); border-top-color: var(--navy); border-radius: 50%; animation: s .8s linear infinite; flex: none; }
+  @keyframes s { to { transform: rotate(360deg); } }
+  .understood { font-size: 13px; color: var(--muted); margin-bottom: 8px; }
+  .understood b { color: var(--ink); font-weight: 600; }
+  .cards { display: grid; gap: 10px; margin-top: 10px; }
+  .job { border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; background: #fff; display: grid; grid-template-columns: 1fr auto; gap: 6px 14px; }
+  .job h3 { margin: 0; font-size: 16px; }
+  .job .co { color: var(--muted); font-size: 14px; }
+  .job .meta { font-size: 13px; color: var(--muted); display: flex; gap: 10px; flex-wrap: wrap; }
+  .tag { font-size: 11px; text-transform: uppercase; letter-spacing: .5px; background: #eef0f4; color: var(--muted); padding: 1px 7px; border-radius: 4px; }
+  .fit { font-size: 13px; padding: 2px 10px; border-radius: 99px; background: #eef0f4; color: var(--muted); white-space: nowrap; display: inline-flex; align-items: center; gap: 6px; }
+  .fit.good { background: var(--green-bg); color: var(--green); font-weight: 600; }
+  .fit.low { background: var(--amber-bg); color: var(--amber); font-weight: 600; }
+  .why { grid-column: 1 / -1; font-size: 13px; color: var(--muted); }
+  .actions { grid-column: 1 / -1; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 4px; }
+  button, .btn { font: inherit; font-size: 14px; font-weight: 600; border: 1px solid var(--navy); background: #fff; color: var(--navy); border-radius: 8px; padding: 7px 14px; cursor: pointer; text-decoration: none; }
+  button.primary { background: var(--navy); color: #fff; }
+  button:disabled { opacity: .55; cursor: default; }
+  .ghost { border-color: transparent; color: var(--muted); font-weight: 500; padding: 7px 6px; }
+  .progress { grid-column: 1 / -1; font-size: 13px; padding: 8px 10px; border-radius: 8px; background: var(--blue-bg); color: var(--navy); display: flex; gap: 8px; align-items: center; }
+  .progress.ok { background: var(--green-bg); color: var(--green); }
+  .progress.warn { background: var(--amber-bg); color: var(--amber); }
+  .progress.bad { background: var(--red-bg); color: var(--red); }
+  .progress.skip { background: #eef0f4; color: var(--muted); }
+  .progress a { color: inherit; font-weight: 600; }
+  .bulk { margin-top: 12px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; margin-top: 6px; }
+  td, th { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+  th { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; }
+  .composer { position: fixed; left: 0; right: 0; bottom: 0; padding: 14px 16px 18px; background: linear-gradient(to top, var(--paper) 70%, transparent); }
+  .composer form { max-width: 860px; margin: 0 auto; display: flex; gap: 8px; background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 6px; box-shadow: 0 4px 18px rgba(20,33,61,.08); }
+  .composer input { flex: 1; border: 0; outline: 0; font: inherit; padding: 10px 12px; background: transparent; color: var(--ink); }
+  .suggest { max-width: 860px; margin: 0 auto 10px; display: flex; gap: 8px; flex-wrap: wrap; }
+  .suggest button { font-weight: 500; font-size: 13px; border-color: var(--line); color: var(--ink); border-radius: 99px; }
+  .hello h2 { margin: 30px 0 6px; font-size: 22px; }
+  .hello p { margin: 0; color: var(--muted); }
+  @media (max-width: 640px) { .job { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>job-agent</h1>
+  <div class="chips" id="chips"></div>
+</header>
+<div id="feed"><div class="wrap" id="wrap">
+  <div class="hello"><h2>What are you looking for?</h2><p>I search Greenhouse, Lever and Ashby, check each role against your resume, and apply when you click Apply.</p></div>
+</div></div>
+<div class="composer">
+  <div class="suggest" id="suggest">
+    <button>SDET or QA automation jobs, remote in Canada</button>
+    <button>AI evaluation / LLM quality roles, remote Canada</button>
+    <button>Senior QA engineer jobs in Toronto, hybrid</button>
+    <button>Show my applications</button>
+  </div>
+  <form id="form"><input id="q" autocomplete="off" placeholder="e.g. SDET jobs remote in Canada"><button class="primary">Send</button></form>
+</div>
+
+<script>
+const $ = (s, el = document) => el.querySelector(s);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+const wrap = $("#wrap");
+let threshold = 7;
+
+async function post(path, body) {
+  const r = await fetch(path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+  const j = await r.json();
+  if (!r.ok) throw new Error(j.error || r.statusText);
+  return j;
+}
+function listen(id, on) {
+  const es = new EventSource(`/api/stream/${id}/events`);
+  es.onmessage = (m) => { const ev = JSON.parse(m.data); on(ev); if (["end", "error", "result", "ledger", "say"].includes(ev.type)) es.close(); };
+  es.onerror = () => es.close();
+}
+const scroll = () => { const f = $("#feed"); f.scrollTop = f.scrollHeight; };
+
+async function loadConfig() {
+  const c = await (await fetch("/api/config")).json();
+  threshold = c.threshold;
+  $("#chips").innerHTML = [
+    c.name && `<span class="chip">${esc(c.name)}</span>`,
+    `<span class="chip">Applied today ${c.appliedToday}/${c.dailyCap}</span>`,
+    `<span class="chip">Applies at fit ≥ ${c.threshold}</span>`,
+    !c.hasKey && `<span class="chip warn">No API key in .env</span>`,
+    c.problem && `<span class="chip warn" title="${esc(c.problem)}">Profile problem</span>`,
+    `<a class="chip" href="/dashboard">Dashboard ↗</a>`,
+  ].filter(Boolean).join("");
+}
+
+function addMsg(who, html) {
+  const m = document.createElement("div");
+  m.className = `msg ${who}`;
+  m.innerHTML = `<div class="bubble">${html}</div>`;
+  wrap.appendChild(m);
+  scroll();
+  return $(".bubble", m);
+}
+
+// ---- send a message ----
+$("#form").onsubmit = async (e) => {
+  e.preventDefault();
+  const text = $("#q").value.trim();
+  if (!text) return;
+  $("#q").value = "";
+  ask(text);
+};
+document.querySelectorAll("#suggest button").forEach((b) => (b.onclick = () => ask(b.textContent)));
+
+async function ask(text) {
+  $(".hello")?.remove();
+  $("#suggest").hidden = true;
+  addMsg("me", esc(text));
+  const bot = addMsg("bot", `<div class="status"><span class="spin"></span><span>Understanding your request…</span></div><div class="cards"></div>`);
+  const statusEl = $(".status span:last-child", bot), cards = $(".cards", bot);
+  const jobs = new Map();
+  try {
+    const { id } = await post("/api/chat", { message: text });
+    listen(id, (ev) => {
+      if (ev.type === "query") {
+        const q = ev.data;
+        if (q.intent === "search") bot.insertAdjacentHTML("afterbegin", `<div class="understood">Looking for <b>${esc(q.titles.slice(0, 4).join(", "))}${q.titles.length > 4 ? "…" : ""}</b> · <b>${esc([...q.places, q.country].filter(Boolean).join(", ") || "any location")}</b> · <b>${esc(q.workplace)}</b></div>`);
+      } else if (ev.type === "status") statusEl.textContent = ev.data;
+      else if (ev.type === "job") { const card = jobCard(ev.data); jobs.set(ev.data.id, { ...ev.data, card }); cards.appendChild(card); scroll(); }
+      else if (ev.type === "fit") { const j = jobs.get(ev.data.id); if (j) { j.fit = ev.data.score; showFit(j.card, ev.data); } }
+      else if (ev.type === "say") { $(".status", bot).outerHTML = `<div>${esc(ev.data)}</div>`; }
+      else if (ev.type === "ledger") { $(".status", bot).outerHTML = ledgerTable(ev.data); }
+      else if (ev.type === "error") { $(".status", bot).innerHTML = `<span style="color:var(--red)">Something went wrong: ${esc(ev.data)}</span>`; }
+      else if (ev.type === "end") {
+        $(".spin", bot)?.remove();
+        if (!jobs.size) { statusEl.textContent += " Try widening it: drop the city, or add another title."; return; }
+        const bulk = document.createElement("div");
+        bulk.className = "bulk";
+        bulk.innerHTML = `<button class="primary">Apply to all with fit ≥ ${threshold}</button><span class="status">Each one runs the full pipeline; low-fit roles are skipped automatically.</span>`;
+        $("button", bulk).onclick = () => {
+          const good = [...jobs.values()].filter((j) => (j.fit ?? 0) >= threshold && !j.applying);
+          if (!good.length) return alert(`No cards scored ${threshold}+ yet.`);
+          if (!confirm(`Apply to ${good.length} role(s) now?`)) return;
+          good.forEach((j) => apply(j.card, j.url, "submit"));
+          $("button", bulk).disabled = true;
+        };
+        bot.appendChild(bulk);
+      }
+    });
+  } catch (err) {
+    $(".status", bot).innerHTML = `<span style="color:var(--red)">${esc(err.message)}</span>`;
+  }
+}
+
+// ---- job card ----
+function jobCard(j) {
+  const el = document.createElement("div");
+  el.className = "job";
+  el.innerHTML = `
+    <div><h3>${esc(j.title)}</h3><div class="co">${esc(j.company)}</div>
+      <div class="meta"><span>📍 ${esc(j.location || "—")}</span>${j.compensation ? `<span>💰 ${esc(j.compensation)}</span>` : ""}<span class="tag">${esc(j.ats)}</span></div></div>
+    <div><span class="fit"><span class="spin"></span>checking fit</span></div>
+    <div class="why"></div>
+    <div class="actions">
+      <button class="primary" data-a="submit">Apply</button>
+      <button data-a="dry" title="Fill the form and screenshot it without submitting">Dry run</button>
+      <a class="ghost btn" href="${esc(j.url)}" target="_blank" rel="noopener">Posting ↗</a>
+    </div>`;
+  el.querySelectorAll("button[data-a]").forEach((b) => (b.onclick = () => apply(el, j.url, b.dataset.a)));
+  return el;
+}
+
+function showFit(card, f) {
+  const pill = $(".fit", card);
+  pill.className = `fit ${f.score >= f.threshold ? "good" : "low"}`;
+  pill.textContent = `Fit ${f.score}/10`;
+  $(".why", card).innerHTML = esc(f.summary) + (f.gaps.length ? ` <i>Gaps: ${esc(f.gaps.join(", "))}</i>` : "") +
+    (f.score < f.threshold ? ` <b>Apply will skip this (below ${f.threshold}).</b>` : "");
+}
+
+function apply(card, url, mode) {
+  card.querySelectorAll("button[data-a]").forEach((b) => (b.disabled = true));
+  let p = $(".progress", card);
+  if (!p) { p = document.createElement("div"); card.appendChild(p); }
+  p.className = "progress";
+  p.innerHTML = `<span class="spin"></span><span>${mode === "dry" ? "Dry run queued" : "Applying…"}</span>`;
+  const line = $("span:last-child", p);
+  post("/api/apply", { url, mode }).then(({ id }) => listen(id, (ev) => {
+    if (ev.type === "status") line.textContent = pretty(ev.data);
+    if (ev.type === "error") { p.className = "progress bad"; p.innerHTML = `✗ ${esc(ev.data)}`; card.querySelectorAll("button[data-a]").forEach((b) => (b.disabled = false)); }
+    if (ev.type === "result") {
+      const r = ev.data, details = `<a href="/dashboard#${encodeURIComponent(r.key)}" target="_blank">details</a>`;
+      const map = {
+        applied: ["ok", `✓ Applied. Fit ${r.score}/10. Tailored resume + cover letter sent. ${details}`],
+        ready: ["warn", `Form filled (dry run), not submitted. ${details}`],
+        needs_manual: ["warn", `Needs you: ${esc(r.reason)} <a href="${esc(r.applyUrl)}" target="_blank">open form</a> · ${details}`],
+        skipped: ["skip", `Skipped: ${esc(r.reason)}`],
+        failed: ["bad", `✗ ${esc(r.reason)} <a href="${esc(r.applyUrl)}" target="_blank">apply by hand</a> · ${details}`],
+      };
+      const [cls, html] = map[r.status] ?? ["warn", `${esc(r.status)}: ${esc(r.reason)}`];
+      p.className = `progress ${cls}`;
+      p.innerHTML = html;
+      if (r.status !== "applied") card.querySelectorAll("button[data-a]").forEach((b) => (b.disabled = false));
+      loadConfig();
+    }
+  })).catch((e) => { p.className = "progress bad"; p.textContent = e.message; });
+  card.applying = true;
+}
+
+function pretty(s) {
+  if (/fetching/.test(s)) return "Reading the posting…";
+  if (/filter/.test(s)) return "Filter: scoring fit against your resume…";
+  if (/briefing \+ editor/.test(s)) return "Writing briefing, tailoring resume + cover note, prepping questions…";
+  if (/submitter: applying/.test(s)) return "Filling the application form and submitting…";
+  if (/submitter/.test(s)) return "Filling the application form…";
+  return s;
+}
+
+function ledgerTable(rows) {
+  if (!rows.length) return "<div>No applications yet.</div>";
+  return `<div>Your latest ${rows.length} roles:</div><table><tr><th>Company</th><th>Role</th><th>Fit</th><th>Status</th><th>Next</th></tr>${rows.map((r) =>
+    `<tr><td>${esc(r.company)}</td><td><a href="/dashboard#${encodeURIComponent(r.key)}" target="_blank">${esc(r.title)}</a></td><td>${r.score ?? "–"}</td><td>${esc(r.status.replace("_", " "))}</td><td>${esc(r.nextStep).slice(0, 50)} ${esc(r.nextStepDate ?? "")}</td></tr>`).join("")}</table>`;
+}
+
+loadConfig();
+$("#q").focus();
+</script>
+</body>
+</html>

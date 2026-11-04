@@ -109,7 +109,7 @@ export async function fetchJob(url: string, fetcher: Fetcher = fetch as unknown 
       description: [d.descriptionPlain ?? htmlToText(d.description ?? ""), lists, d.additionalPlain ?? ""].join("\n\n").trim(),
       url,
       applyUrl: d.applyUrl ?? `${d.hostedUrl ?? url}/apply`,
-      compensation: sr ? `${sr.currency} ${sr.min}-${sr.max} ${sr.interval ?? ""}`.trim() : undefined,
+      compensation: sr ? `${sr.currency} ${Number(sr.min).toLocaleString("en-US")}-${Number(sr.max).toLocaleString("en-US")}${/hour/i.test(sr.interval ?? "") ? "/hr" : /month/i.test(sr.interval ?? "") ? "/mo" : "/yr"}` : undefined,
       employmentType: d.categories?.commitment,
       questions: [],
     };

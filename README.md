@@ -49,11 +49,24 @@ Fill in `.env` (`ANTHROPIC_API_KEY`), `config/profile.yaml`, and `config/resume.
 
 ## Use
 
-### Web UI
+### Chat (main way to use it)
 
 ```bash
-npm run ui      # http://localhost:3000 — paste a job link, watch the agents, browse the ledger, spar
-npm run demo    # same UI on sample data (fake model, local fake form): safe to click around
+npm run ui      # http://localhost:3000
+```
+
+Type what you want, e.g. *"SDET or QA automation jobs, remote in Canada"*. The bot:
+
+1. turns the message into roles + synonyms, country/cities and work mode,
+2. finds open postings with web search restricted to Greenhouse, Lever and Ashby, plus every company board it has seen before (`data/boards.json`, grows with each search),
+3. drops wrong location / work mode / contract / under-floor pay / already-applied roles,
+4. shows a card per role with a fit score from the filter agent,
+5. **Apply** on a card runs the whole pipeline and submits; **Apply to all with fit ≥ 7** queues every good card.
+
+`/dashboard` has the ledger, per-job briefing, cover note, form answers, PDFs and the sparring drill.
+
+```bash
+npm run demo    # the same chat on a fake job market + fake form: no API key, nothing real is sent
 ```
 
 The UI only listens on localhost. Agents, the browser and your resume all stay on your machine.

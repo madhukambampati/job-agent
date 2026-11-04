@@ -9,7 +9,15 @@ import { z } from "zod";
 export interface LLM {
   structured<T>(req: StructuredRequest<T>): Promise<T>;
   /** Free-form answer with Claude's server-side web search enabled. */
-  research(req: { system: string; prompt: string; maxSearches?: number }): Promise<ResearchResult>;
+  research(req: ResearchRequest): Promise<ResearchResult>;
+}
+
+export interface ResearchRequest {
+  system: string;
+  prompt: string;
+  maxSearches?: number;
+  /** Restrict web search to these domains (e.g. the ATS job boards). */
+  allowedDomains?: string[];
 }
 
 export interface StructuredRequest<T> {
@@ -108,7 +116,7 @@ export class AnthropicLLM implements LLM {
     return req.schema.parse(normalizeEnums(raw, z.toJSONSchema(req.schema, { io: "output" }) as JsonSchema));
   }
 
-  async research(req: { system: string; prompt: string; maxSearches?: number }): Promise<ResearchResult> {
+  async research(req: ResearchRequest): Promise<ResearchResult> {
     const res = await this.client.messages.create({
       model: this.model,
       max_tokens: 4096,
@@ -120,6 +128,7 @@ export class AnthropicLLM implements LLM {
           name: "web_search",
           max_uses: req.maxSearches ?? 6,
           allowed_callers: ["direct"],
+          ...(req.allowedDomains ? { allowed_domains: req.allowedDomains } : {}),
         } as unknown as Anthropic.ToolUnion,
       ],
       messages: [{ role: "user", content: req.prompt }],
