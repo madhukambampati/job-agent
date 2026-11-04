@@ -26,6 +26,53 @@ export interface ResearchResult {
   sources: { title: string; url: string }[];
 }
 
+type JsonSchema = Record<string, any>;
+
+const UNSUPPORTED = ["minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum", "multipleOf", "minLength", "maxLength", "maxItems", "pattern", "$schema"];
+
+/**
+ * Converts a zod schema to the subset the structured-output API accepts:
+ * numeric/length limits move into the description (zod still enforces them),
+ * every object gets additionalProperties:false, minItems only 0 or 1.
+ */
+export function toApiSchema(schema: z.ZodType): JsonSchema {
+  const walk = (node: JsonSchema): JsonSchema => {
+    if (Array.isArray(node)) return node.map(walk) as unknown as JsonSchema;
+    if (!node || typeof node !== "object") return node;
+    const out: JsonSchema = {};
+    const notes: string[] = [];
+    for (const [k, v] of Object.entries(node)) {
+      if (UNSUPPORTED.includes(k)) {
+        if (k !== "$schema" && Math.abs(Number(v)) < 1e12) notes.push(`${k}: ${v}`);
+        continue;
+      }
+      if (k === "minItems" && Number(v) > 1) {
+        notes.push(`minItems: ${v}`);
+        continue;
+      }
+      out[k] = typeof v === "object" ? walk(v) : v;
+    }
+    if (out.type === "object") out.additionalProperties = false;
+    if (notes.length) out.description = [out.description, `(${notes.join(", ")})`].filter(Boolean).join(" ");
+    return out;
+  };
+  return walk(z.toJSONSchema(schema, { io: "output" }) as JsonSchema);
+}
+
+/** The API may change enum casing ("Technical" vs "technical"); map back to the schema's spelling. */
+export function normalizeEnums(value: unknown, schema: JsonSchema): unknown {
+  if (!schema || typeof schema !== "object") return value;
+  if (Array.isArray(schema.enum) && typeof value === "string") {
+    return schema.enum.find((e: unknown) => typeof e === "string" && e.toLowerCase() === value.toLowerCase()) ?? value;
+  }
+  if (Array.isArray(value) && schema.items) return value.map((v) => normalizeEnums(v, schema.items));
+  if (value && typeof value === "object" && schema.properties) {
+    const o = value as Record<string, unknown>;
+    for (const k of Object.keys(o)) if (schema.properties[k]) o[k] = normalizeEnums(o[k], schema.properties[k]);
+  }
+  return value;
+}
+
 export const DEFAULT_MODEL = process.env.JOB_AGENT_MODEL ?? "claude-sonnet-5-5";
 export const WEB_SEARCH_TOOL = process.env.JOB_AGENT_WEB_SEARCH_TOOL ?? "web_search_20260318";
 
@@ -40,26 +87,25 @@ export class AnthropicLLM implements LLM {
     this.client = new Anthropic({ apiKey });
   }
 
+  /**
+   * Uses the API's native JSON-schema output mode (output_config.format), which
+   * every current model supports, unlike forced tool_choice. The zod schema is
+   * still the final word: the reply is validated against it after parsing.
+   */
   async structured<T>(req: StructuredRequest<T>): Promise<T> {
-    const inputSchema = z.toJSONSchema(req.schema, { target: "draft-7" }) as Record<string, unknown>;
-    delete inputSchema.$schema;
+    const schema = toApiSchema(req.schema);
     const res = await this.client.messages.create({
       model: this.model,
       max_tokens: req.maxTokens ?? 4096,
-      system: req.system,
-      tools: [
-        {
-          name: req.toolName,
-          description: req.toolDescription,
-          input_schema: inputSchema as Anthropic.Tool.InputSchema,
-        },
-      ],
-      tool_choice: { type: "tool", name: req.toolName },
+      system: `${req.system}\n\nRespond with JSON only. Task: ${req.toolDescription}`,
       messages: [{ role: "user", content: req.prompt }],
-    });
-    const block = res.content.find((b) => b.type === "tool_use");
-    if (!block || block.type !== "tool_use") throw new Error(`Model did not call ${req.toolName}`);
-    return req.schema.parse(block.input);
+      output_config: { format: { type: "json_schema", schema } },
+    } as unknown as Anthropic.MessageCreateParamsNonStreaming);
+    if (res.stop_reason === "max_tokens") throw new Error(`${req.toolName}: reply hit max_tokens (${req.maxTokens ?? 4096}); raise it`);
+    if (res.stop_reason === "refusal") throw new Error(`${req.toolName}: model declined this request`);
+    const text = res.content.map((b) => (b.type === "text" ? b.text : "")).join("");
+    const raw = JSON.parse(text);
+    return req.schema.parse(normalizeEnums(raw, z.toJSONSchema(req.schema, { io: "output" }) as JsonSchema));
   }
 
   async research(req: { system: string; prompt: string; maxSearches?: number }): Promise<ResearchResult> {

@@ -131,3 +131,24 @@ describe("deterministic answers", () => {
     expect(deterministicAnswer(f("Do you hold a security clearance?"), profile, docs)).toBeNull();
   });
 });
+
+describe("structured-output schema conversion", async () => {
+  const { toApiSchema, normalizeEnums } = await import("../src/llm.js");
+  const T = await import("../src/types.js");
+  const bad = ["minimum", "maximum", "minLength", "maxLength", "maxItems", "exclusiveMinimum", "exclusiveMaximum", "pattern"];
+  const check = (n: any, path = "$"): string[] => {
+    if (!n || typeof n !== "object") return [];
+    const errs: string[] = [];
+    for (const k of bad) if (k in n) errs.push(`${path}.${k}`);
+    if (n.type === "object" && n.additionalProperties !== false) errs.push(`${path} additionalProperties`);
+    if ("minItems" in n && n.minItems > 1) errs.push(`${path}.minItems`);
+    for (const [k, v] of Object.entries(n)) errs.push(...check(v, `${path}.${k}`));
+    return errs;
+  };
+  it.each(["FitScoreSchema", "EditorOutputSchema", "InterviewQuestionsSchema", "AnswerGradeSchema"])("%s only uses supported keywords", (name) => {
+    expect(check(toApiSchema((T as any)[name]))).toEqual([]);
+  });
+  it("maps enum casing back", () => {
+    expect(normalizeEnums({ severity: "Major" }, { properties: { severity: { enum: ["major", "minor"] } } })).toEqual({ severity: "major" });
+  });
+});
