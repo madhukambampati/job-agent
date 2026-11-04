@@ -92,7 +92,8 @@ export class AnthropicLLM implements LLM {
     apiKey: string | undefined = process.env.ANTHROPIC_API_KEY,
   ) {
     if (!apiKey) throw new Error("ANTHROPIC_API_KEY is not set. Copy .env.example to .env and fill it in.");
-    this.client = new Anthropic({ apiKey });
+    // Bounded so a slow call surfaces as an error instead of a spinner that never ends.
+    this.client = new Anthropic({ apiKey, timeout: 120_000, maxRetries: 2 });
   }
 
   /**

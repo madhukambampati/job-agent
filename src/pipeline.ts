@@ -7,6 +7,7 @@ import { scoreFit } from "./agents/filter.js";
 import { Ledger } from "./agents/ledger.js";
 import { hardRuleViolations } from "./agents/rules.js";
 import { generateQuestions, questionsMarkdown } from "./agents/sparring.js";
+import { addDays, localDay } from "./dates.js";
 import { fetchJob, type Fetcher } from "./jobs/fetch.js";
 import type { LLM } from "./llm.js";
 import { fullName, type Profile } from "./profile.js";
@@ -43,7 +44,7 @@ export interface RunResult {
 }
 
 const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40);
-const plusDays = (d: number) => new Date(Date.now() + d * 86_400_000).toISOString().slice(0, 10);
+const plusDays = (d: number) => addDays(d);
 
 export async function runJob(
   url: string,
@@ -72,7 +73,7 @@ export async function runJob(
 
   log("filter: scoring fit");
   const fit = await scoreFit(llm, job, resumeText);
-  const outDir = resolve(opts.outRoot ?? "out", `${new Date().toISOString().slice(0, 10)}-${slug(job.company)}-${slug(job.title)}`);
+  const outDir = resolve(opts.outRoot ?? "out", `${localDay()}-${slug(job.company)}-${slug(job.title)}`);
   mkdirSync(outDir, { recursive: true });
   writeFileSync(join(outDir, "job.json"), JSON.stringify(job, null, 2));
   writeFileSync(join(outDir, "fit.json"), JSON.stringify(fit, null, 2));
@@ -140,7 +141,8 @@ export async function runJob(
     score: fit.score,
     appliedAt: status === "applied" ? new Date().toISOString() : null,
     nextStep,
-    nextStepDate: status === "applied" ? plusDays(7) : plusDays(1),
+    // Applied: follow up in a week. Anything else needs you now, so it is due today.
+    nextStepDate: status === "applied" ? plusDays(7) : plusDays(0),
     notes: [reason, edit.rejected.length ? `${edit.rejected.length} editor claim(s) rejected by honesty guard` : ""].filter(Boolean).join(" | "),
     outDir,
   });

@@ -60,6 +60,14 @@ function titleCase(slug: string): string {
   return slug.replace(/[-_]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
+/** Ashby sets isRemote alongside workplaceType "Hybrid"; the workplace type is the truth. */
+function ashbyLocation(j: any): string {
+  const wt = String(j.workplaceType ?? "");
+  const remote = /remote/i.test(wt) || (j.isRemote && !/hybrid|onsite|on-site/i.test(wt));
+  const places = [j.location, ...(j.secondaryLocations ?? []).map((l: any) => l?.location)].filter(Boolean);
+  return [...new Set(places)].join(" / ") + [remote ? "Remote" : "", /hybrid/i.test(wt) ? "Hybrid" : "", /onsite|on-site/i.test(wt) ? "On-site" : ""].filter(Boolean).map((x) => ` · ${x}`).join("");
+}
+
 export async function fetchJob(url: string, fetcher: Fetcher = fetch as unknown as Fetcher): Promise<Job> {
   const p = parseJobUrl(url);
   const get = async (apiUrl: string) => {
@@ -124,7 +132,7 @@ export async function fetchJob(url: string, fetcher: Fetcher = fetch as unknown 
       ats: "ashby",
       company: titleCase(p.board),
       title: j.title,
-      location: [j.location, j.isRemote ? "Remote" : "", j.workplaceType].filter(Boolean).join(" · "),
+      location: ashbyLocation(j),
       description: j.descriptionPlain ?? htmlToText(j.descriptionHtml ?? ""),
       url,
       applyUrl: j.applyUrl ?? `${j.jobUrl ?? url}/application`,

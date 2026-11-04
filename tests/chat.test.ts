@@ -38,7 +38,7 @@ describe("searchJobs on a fake market", () => {
     const status: string[] = [];
     const jobs = await searchJobs(llm, q, { profile, fetcher, boards }, { status: (m) => status.push(m), job: () => {} });
     expect(jobs.map((j) => j.company).sort()).toEqual(["Lakeside", "Maplesoft", "Northwind"]);
-    expect(status.at(-1)).toMatch(/3 matching roles.*not in Canada.*contract/);
+    expect(status.at(-1)).toMatch(/3 matching roles.*in another country.*contract/);
     expect(boards.list()).toContain("lever:northwind");
     expect(llm.calls.find((c) => c.tool === "research")!.prompt).toMatch(/jobs\.lever\.co/);
   });
@@ -111,4 +111,66 @@ describe("chat → cards → Apply over HTTP", () => {
     const again = await events((await post("/api/chat", { message: "SDET remote Canada" })).id);
     expect(again.filter((e) => e.type === "job").map((e) => e.data.company)).not.toContain("Northwind");
   }, 120000);
+});
+
+describe("QA report regressions (Nov 4)", () => {
+  it("#1 California is not Canada, hybrid is not remote, LATAM titles are out", () => {
+    expect(placeMatches("Sunnyvale, CA · Remote · Hybrid", "", q)).toMatchObject({ ok: false, reason: "hybrid, not remote" });
+    expect(placeMatches("Sunnyvale, CA · Remote", "", q)).toMatchObject({ ok: false, reason: "in another country" });
+    expect(placeMatches("Remote", "Help Canadian homeowners with HELOC products.", q, "Senior QA Automation Engineer - HELOC (LATAM)")).toMatchObject({ ok: false });
+    expect(placeMatches("Buenos Aires, Argentina · Remote", "", q).ok).toBe(false);
+    expect(placeMatches("Remote", "Our customers include Canadian banks.", q).ok).toBe(false);
+    expect(placeMatches("Remote", "This role is fully remote and open to candidates located in Canada.", q).ok).toBe(true);
+    expect(placeMatches("Remote - US or Canada", "", q).ok).toBe(true);
+    expect(placeMatches("Toronto, ON · Remote", "", q).ok).toBe(true);
+    expect(placeMatches("Waterloo, Ontario, Canada · Remote", "", q).ok).toBe(true);
+  });
+
+  it("#1 Ashby: workplaceType Hybrid wins over isRemote", async () => {
+    const { fetchJob } = await import("../src/jobs/fetch.js");
+    const fetcher = async () => ({ ok: true, status: 200, text: async () => "", json: async () => ({ jobs: [{ id: "x1", title: "SDET", location: "Sunnyvale, CA", isRemote: true, workplaceType: "Hybrid", descriptionPlain: "d" }] }) });
+    const j = await fetchJob("https://jobs.ashbyhq.com/cerebras/x1", fetcher);
+    expect(j.location).toBe("Sunnyvale, CA · Hybrid");
+  });
+
+  it("#2 every card gets a fit score or a visible fit_error, nothing hangs", async () => {
+    const form = await startFormServer({ "/apply": FORM_HAPPY });
+    const { llm, fetcher } = fakeMarket(`${form.url}/apply`);
+    const slow = {
+      research: llm.research.bind(llm),
+      structured: (req: any) => (req.toolName === "record_fit" && /Lakeside/i.test(req.prompt) ? new Promise(() => {}) : llm.structured(req)),
+    } as any;
+    const dir = mkdtempSync(join(tmpdir(), "fit-"));
+    const app = createApp({ llm: () => slow, load: () => ({ profile, resumeMarkdown: RESUME_MD }), launch: launchBrowser, fetcher, ledgerPath: join(dir, "l.json"), boards: new BoardMemory(join(dir, "b.json")), fitTimeoutMs: 300, fitConcurrency: 2 });
+    await new Promise<void>((r) => app.listen(0, "127.0.0.1", r));
+    const b = `http://127.0.0.1:${(app.address() as AddressInfo).port}`;
+    try {
+      const { id } = await (await fetch(b + "/api/chat", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ message: "SDET remote Canada" }) })).json();
+      const evs = (await (await fetch(`${b}/api/stream/${id}/events`)).text()).split("\n\n").filter(Boolean).map((l) => JSON.parse(l.slice(6)));
+      const jobIds = evs.filter((e) => e.type === "job").map((e) => e.data.id);
+      const settled = evs.filter((e) => e.type === "fit" || e.type === "fit_error").map((e) => e.data.id);
+      expect(settled.sort()).toEqual(jobIds.sort());
+      expect(evs.find((e) => e.type === "fit_error").data.error).toMatch(/timed out/);
+      expect(evs.at(-1).type).toBe("end");
+    } finally {
+      app.close();
+      form.server.close();
+    }
+  }, 30000);
+
+  it("#5 days are local, not UTC (9pm in Toronto is still today)", async () => {
+    const prev = process.env.TZ;
+    process.env.TZ = "America/Toronto";
+    try {
+      const { localDay } = await import("../src/dates.js");
+      const { Ledger } = await import("../src/agents/ledger.js");
+      expect(localDay(new Date("2026-11-04T02:00:00Z"))).toBe("2026-11-03");
+      const l = new Ledger(join(mkdtempSync(join(tmpdir(), "tz-")), "l.json"));
+      l.upsert({ key: "a", company: "A", title: "t", url: "u", status: "applied", appliedAt: "2026-11-04T02:00:00Z" });
+      expect(l.appliedToday(new Date("2026-11-04T03:30:00Z"))).toBe(1);
+      expect(l.appliedToday(new Date("2026-11-04T14:00:00Z"))).toBe(0);
+    } finally {
+      process.env.TZ = prev;
+    }
+  });
 });

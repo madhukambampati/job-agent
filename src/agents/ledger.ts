@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { z } from "zod";
+import { localDay } from "../dates.js";
 import { LedgerRowSchema, type LedgerRow, type LedgerStatus } from "../types.js";
 
 /**
@@ -29,8 +30,8 @@ export class Ledger {
   }
 
   appliedToday(now = new Date()): number {
-    const day = now.toISOString().slice(0, 10);
-    return this.rows.filter((r) => r.appliedAt?.startsWith(day)).length;
+    const day = localDay(now);
+    return this.rows.filter((r) => r.appliedAt && localDay(new Date(r.appliedAt)) === day).length;
   }
 
   upsert(row: Partial<LedgerRow> & Pick<LedgerRow, "key" | "company" | "title" | "url">): LedgerRow {
@@ -69,7 +70,7 @@ export class Ledger {
   /** Applied roles with no follow-up after `days`, or with a next step due. */
   due(now = new Date(), days = 7): LedgerRow[] {
     const cutoff = now.getTime() - days * 86_400_000;
-    const today = now.toISOString().slice(0, 10);
+    const today = localDay(now);
     return this.all().filter(
       (r) =>
         (r.status === "applied" && r.appliedAt && new Date(r.appliedAt).getTime() < cutoff) ||

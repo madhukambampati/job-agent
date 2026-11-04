@@ -123,19 +123,37 @@ export async function listBoard(key: string, fetcher: Fetcher): Promise<Candidat
   }
   if (ats === "ashby") {
     const d = await get(`https://api.ashbyhq.com/posting-api/job-board/${board}`);
-    return (d.jobs ?? []).map((j: any) => ({ url: j.jobUrl ?? `https://jobs.ashbyhq.com/${board}/${j.id}`, title: j.title, location: [j.location, j.isRemote ? "Remote" : ""].filter(Boolean).join(" · ") }));
+    return (d.jobs ?? []).map((j: any) => ({ url: j.jobUrl ?? `https://jobs.ashbyhq.com/${board}/${j.id}`, title: j.title, location: [j.location, j.isRemote && !/hybrid|onsite/i.test(j.workplaceType ?? "") ? "Remote" : "", j.workplaceType].filter(Boolean).join(" · ") }));
   }
   return [];
 }
 
 // ---- 3. Filter ---------------------------------------------------------------
 
-const COUNTRY_HINTS: Record<string, string[]> = {
-  canada: ["canada", "canadian", ", ca", " ca ", "(ca)", "ontario", "toronto", "ottawa", "waterloo", "kitchener", "vancouver", "british columbia", "montreal", "montréal", "quebec", "québec", "calgary", "edmonton", "alberta", "winnipeg", "manitoba", "halifax", "nova scotia", "saskatchewan", "new brunswick", "mississauga"],
-  "united states": ["united states", "usa", "u.s.", " us ", "(us)", "us-", "new york", "san francisco", "seattle", "austin", "boston", "chicago"],
-  "united kingdom": ["united kingdom", " uk", "london", "england", "scotland", "manchester"],
-  india: ["india", "bengaluru", "bangalore", "hyderabad", "pune", "chennai", "mumbai", "delhi", "gurgaon", "noida"],
+/**
+ * Region markers matched as whole words against location + title. Two-letter
+ * codes only count after a comma ("Sunnyvale, CA" is California, not Canada).
+ */
+const US_STATES = "al|ak|az|ar|ca|co|ct|de|fl|ga|hi|id|il|in|ia|ks|ky|la|me|md|ma|mi|mn|ms|mo|mt|ne|nv|nh|nj|nm|ny|nc|nd|oh|ok|or|pa|ri|sc|sd|tn|tx|ut|vt|va|wa|wv|wi|wy|dc";
+const REGIONS: Record<string, RegExp> = {
+  canada: /\bcanada\b|\bcanadian\b|\bontario\b|\btoronto\b|\bottawa\b|\bwaterloo\b|\bkitchener\b|\bmississauga\b|\bvancouver\b|\bbritish columbia\b|\bmontr[eé]al\b|\bqu[eé]bec\b|\bcalgary\b|\bedmonton\b|\balberta\b|\bwinnipeg\b|\bmanitoba\b|\bhalifax\b|\bnova scotia\b|\bsaskatchewan\b|\bnew brunswick\b|\bnewfoundland\b|,\s*(on|bc|qc|ab|mb|ns|nb|sk|nl|pe)\b/,
+  "united states": new RegExp(`\\bunited states\\b|\\busa\\b|\\bu\\.s\\.|\\bus\\b|\\bamericas?\\b|\\bnew york\\b|\\bsan francisco\\b|\\bsunnyvale\\b|\\bseattle\\b|\\baustin\\b|\\bboston\\b|\\bchicago\\b|\\bcalifornia\\b|\\btexas\\b|,\\s*(${US_STATES})\\b`),
+  "united kingdom": /\bunited kingdom\b|\buk\b|\blondon\b|\bengland\b|\bscotland\b|\bmanchester\b/,
+  india: /\bindia\b|\bbengaluru\b|\bbangalore\b|\bhyderabad\b|\bpune\b|\bchennai\b|\bmumbai\b|\bdelhi\b|\bgurgaon\b|\bnoida\b/,
+  latam: /\blatam\b|\blatin america\b|\bargentina\b|\bbrazil\b|\bbrasil\b|\bmexico\b|\bcolombia\b|\bchile\b|\bperu\b|\buruguay\b|\bcosta rica\b|\bbuenos aires\b|\bs[aã]o paulo\b/,
+  europe: /\bemea\b|\beurope\b|\beu\b|\bgermany\b|\bpoland\b|\bportugal\b|\bspain\b|\bfrance\b|\bnetherlands\b|\bireland\b|\bromania\b|\bukraine\b|\bberlin\b|\bamsterdam\b|\bdublin\b|\blisbon\b|\bwarsaw\b/,
+  apac: /\bapac\b|\baustralia\b|\bsingapore\b|\bphilippines\b|\bjapan\b|\bvietnam\b|\bnew zealand\b/,
 };
+
+function regionKey(country: string): string {
+  const c = country.toLowerCase().trim();
+  if (/^(usa?|u\.s\.?|america)$/.test(c)) return "united states";
+  if (/^(uk|great britain|britain)$/.test(c)) return "united kingdom";
+  return c;
+}
+
+/** Explicit "you must be in X" lines near the top of a posting. */
+const STATED_ELIGIBILITY = /(remote|work|based|located|reside|residing|live|living|anywhere|eligible|authori[sz]ed|hire|hiring|candidates)[^.\n]{0,50}\b(in|within|across|from)\b[^.\n]{0,15}/g;
 
 export function titleMatches(title: string, q: SearchQuery): boolean {
   const t = ` ${title.toLowerCase()} `;
@@ -143,25 +161,39 @@ export function titleMatches(title: string, q: SearchQuery): boolean {
   return q.titles.some((x) => t.includes(x.toLowerCase())) || q.titles.length === 0;
 }
 
-/** Location check on what the posting itself says. `text` should include location + the start of the description. */
-export function placeMatches(location: string, descHead: string, q: SearchQuery): { ok: boolean; reason: string } {
+/**
+ * Location check on what the posting itself says.
+ * `location` is the ATS location/workplace text, `title` catches "(LATAM)"-style
+ * suffixes, `descHead` is the start of the description.
+ */
+export function placeMatches(location: string, descHead: string, q: SearchQuery, title = ""): { ok: boolean; reason: string } {
   const loc = ` ${location.toLowerCase()} `;
+  const where = `${loc} ${title.toLowerCase()}`;
   const head = descHead.toLowerCase();
-  const isRemote = /remote|anywhere|work from home|distributed/.test(loc);
-  if (q.workplace === "remote" && !isRemote) return { ok: false, reason: "not remote" };
-  if (q.workplace === "onsite" && isRemote) return { ok: false, reason: "remote, not onsite" };
-  if (q.workplace === "hybrid" && !/hybrid/.test(loc + head)) return { ok: false, reason: "not hybrid" };
+  const saysHybrid = /\bhybrid\b/.test(loc);
+  const saysOnsite = /\bon-?site\b|\bin[- ]office\b/.test(loc);
+  // "Remote · Hybrid" is not a remote job: the workplace type wins.
+  const isRemote = /remote|anywhere|work from home|distributed/.test(loc) && !saysHybrid && !saysOnsite;
+  if (q.workplace === "remote" && !isRemote) return { ok: false, reason: saysHybrid ? "hybrid, not remote" : saysOnsite ? "on-site, not remote" : "not remote" };
+  if (q.workplace === "onsite" && !saysOnsite && /remote/.test(loc)) return { ok: false, reason: "remote, not onsite" };
+  if (q.workplace === "hybrid" && !saysHybrid && !/\bhybrid\b/.test(head.slice(0, 600))) return { ok: false, reason: "not hybrid" };
 
-  const country = q.country.toLowerCase();
-  if (country) {
-    const hints = COUNTRY_HINTS[country] ?? [country];
-    const inLoc = hints.some((h) => loc.includes(h));
-    // "Remote" with no country: accept only if the posting says the country early on.
-    const inDesc = hints.some((h) => head.includes(h.trim()));
-    if (!inLoc && !(isRemote && inDesc)) return { ok: false, reason: `not in ${q.country}` };
-    // "Remote - US" style postings that mention Canada only in passing.
-    const otherCountry = Object.entries(COUNTRY_HINTS).some(([c, hs]) => c !== country && hs.slice(0, 3).some((h) => loc.includes(h)));
-    if (otherCountry && !inLoc) return { ok: false, reason: "remote in another country" };
+  if (q.country) {
+    const key = regionKey(q.country);
+    const target = REGIONS[key] ?? new RegExp(`\\b${key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`);
+    const others = Object.entries(REGIONS).filter(([k]) => k !== key);
+    const inLoc = target.test(where);
+    const otherInLoc = others.find(([, re]) => re.test(where));
+    if (otherInLoc && !inLoc) return { ok: false, reason: "in another country" };
+    if (!inLoc) {
+      // No place named at all: only accept a remote role whose posting says it hires in the country.
+      if (!isRemote) return { ok: false, reason: `not in ${q.country}` };
+      const statements = (head.slice(0, 2500).match(STATED_ELIGIBILITY) ?? []).join(" ");
+      const tail = head.slice(0, 2500);
+      const okHere = target.test(statements) || new RegExp(`(remote|based)[^.\\n]{0,20}\\(?(?:${target.source})`).test(tail);
+      if (!okHere) return { ok: false, reason: `not stated as open in ${q.country}` };
+      if (others.some(([, re]) => re.test(statements)) && !target.test(statements)) return { ok: false, reason: "in another country" };
+    }
   }
   if (q.places.length && !isRemote && !q.places.some((p) => loc.includes(p.toLowerCase()))) return { ok: false, reason: "different city" };
   return { ok: true, reason: "" };
@@ -205,7 +237,7 @@ export async function searchJobs(
     for (const c of lists.flat()) {
       if (!titleMatches(c.title, q)) continue;
       // Board listings only carry a short location; let vague "Remote" through to the detail check.
-      const quick = placeMatches(c.location, "", q);
+      const quick = placeMatches(c.location, "", q, c.title);
       if (!quick.ok && !/^\s*(remote)?\s*$/i.test(c.location) && !/remote/i.test(c.location)) continue;
       candidates.push(c.url);
     }
@@ -236,7 +268,7 @@ export async function searchJobs(
     boards.add(p.ats, p.board);
     if (deps.isKnown?.(job.id)) return note("already applied");
     if (!titleMatches(job.title, q)) return note("different role");
-    const place = placeMatches(`${job.location} ${job.employmentType ?? ""}`, job.description.slice(0, 2000), q);
+    const place = placeMatches(`${job.location} ${job.employmentType ?? ""}`, job.description.slice(0, 2500), q, job.title);
     if (!place.ok) return note(place.reason);
     const emp = employmentOk(job, deps.profile);
     if (emp) return note(emp);

@@ -118,7 +118,8 @@ const api = async (path, opts) => {
   if (!r.ok) throw new Error(j.error || r.statusText);
   return j;
 };
-const today = () => new Date().toISOString().slice(0, 10);
+const localDay = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+const today = () => localDay();
 
 // ---- tiny markdown -> html (headings, lists, bold, italics, links, tables) ----
 function md(src) {
@@ -228,7 +229,7 @@ async function loadLedger() {
       <td><b>${esc(r.company)}</b><br><span class="hint" style="margin:0">${esc(r.title)}</span></td>
       <td class="score ${r.score >= 7 ? "hi" : "lo"}">${r.score ?? "–"}</td>
       <td><span class="badge b-${r.status}">${r.status.replace("_", " ")}</span></td>
-      <td class="hide-sm">${r.appliedAt ? r.appliedAt.slice(0, 10) : ""}</td>
+      <td class="hide-sm">${r.appliedAt ? localDay(new Date(r.appliedAt)) : ""}</td>
       <td>${esc(r.nextStep).slice(0, 70)}${r.nextStepDate ? `<br><span class="${due ? "due" : "hint"}" style="margin:0">${due ? "Due " : ""}${r.nextStepDate}</span>` : ""}</td></tr>`;
   }).join("")}</tbody></table>`;
   document.querySelectorAll("tr.row").forEach((tr) => (tr.onclick = () => openJob(tr.dataset.key)));
@@ -236,12 +237,12 @@ async function loadLedger() {
 
 // ---- job detail ----
 let job = null, tab = "report";
-async function openJob(key) {
+async function openJob(key, opts = {}) {
   selected = key;
   document.querySelectorAll("tr.row").forEach((tr) => tr.classList.toggle("sel", tr.dataset.key === key));
   job = await api(`/api/job/${encodeURIComponent(key)}`);
   renderJob();
-  $("#detail").scrollIntoView({ behavior: "smooth", block: "start" });
+  if (!opts.keepScroll) $("#detail").scrollIntoView({ behavior: "auto", block: "start" });
 }
 const fileUrl = (name) => `/api/file/${encodeURIComponent(job.row.key)}/${encodeURIComponent(name)}`;
 
@@ -262,7 +263,7 @@ function renderJob() {
   d.querySelectorAll(".tab").forEach((b) => (b.onclick = () => { tab = b.dataset.t; renderJob(); }));
   $("#save").onclick = async () => {
     await api(`/api/ledger/${encodeURIComponent(r.key)}`, { status: $("#st").value, nextStep: $("#next").value, nextStepDate: $("#nextDate").value });
-    await loadLedger(); openJob(r.key);
+    await loadLedger(); openJob(r.key, { keepScroll: true });
   };
   const pane = $("#pane");
   const pdfs = job.files.filter((f) => f.endsWith(".pdf"));

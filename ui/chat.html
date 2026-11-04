@@ -17,7 +17,8 @@
   header .chips { margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
   .chip { font-size: 12px; padding: 3px 10px; border-radius: 99px; background: rgba(255,255,255,.14); color: #fff; text-decoration: none; }
   .chip.warn { background: #b4232c; }
-  #feed { flex: 1; overflow-y: auto; padding: 24px 16px 180px; }
+  [hidden] { display: none !important; }
+  #feed { flex: 1; min-height: 0; overflow-y: auto; padding: 24px 16px 24px; }
   .wrap { max-width: 860px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
   .msg { display: flex; }
   .msg.me { justify-content: flex-end; }
@@ -50,12 +51,25 @@
   .progress.bad { background: var(--red-bg); color: var(--red); }
   .progress.skip { background: #eef0f4; color: var(--muted); }
   .progress a { color: inherit; font-weight: 600; }
+  .fit.na { background: #eef0f4; color: var(--muted); }
+  .details { grid-column: 1 / -1; border-top: 1px solid var(--line); margin-top: 6px; padding-top: 10px; font-size: 14px; }
+  .details .files { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+  .details .files a { border: 1px solid var(--line); border-radius: 8px; padding: 5px 10px; color: var(--navy); text-decoration: none; font-size: 13px; }
+  .details .tabs { display: flex; gap: 4px; margin: 6px 0 8px; flex-wrap: wrap; }
+  .details .tabs button { font-size: 13px; padding: 4px 10px; border-color: var(--line); color: var(--muted); }
+  .details .tabs button.on { border-color: var(--navy); color: var(--navy); }
+  .details .pane { max-height: 420px; overflow: auto; }
+  .details .pane h1 { font-size: 16px; } .details .pane h2 { font-size: 14px; } .details .pane h3 { font-size: 13px; }
+  .details img { max-width: 100%; border: 1px solid var(--line); border-radius: 8px; }
   .bulk { margin-top: 12px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
   table { width: 100%; border-collapse: collapse; font-size: 14px; margin-top: 6px; }
   td, th { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); }
   th { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; }
-  .composer { position: fixed; left: 0; right: 0; bottom: 0; padding: 14px 16px 18px; background: linear-gradient(to top, var(--paper) 70%, transparent); }
+  .composer { flex: none; padding: 10px 16px 16px; background: var(--paper); border-top: 1px solid var(--line); }
   .composer form { max-width: 860px; margin: 0 auto; display: flex; gap: 8px; background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 6px; box-shadow: 0 4px 18px rgba(20,33,61,.08); }
+  .composer form.empty { border-color: var(--red); animation: nudge .25s 2; }
+  @keyframes nudge { 50% { transform: translateX(4px); } }
+  .composer .err { max-width: 860px; margin: 6px auto 0; color: var(--red); font-size: 13px; }
   .composer input { flex: 1; border: 0; outline: 0; font: inherit; padding: 10px 12px; background: transparent; color: var(--ink); }
   .suggest { max-width: 860px; margin: 0 auto 10px; display: flex; gap: 8px; flex-wrap: wrap; }
   .suggest button { font-weight: 500; font-size: 13px; border-color: var(--line); color: var(--ink); border-radius: 99px; }
@@ -80,6 +94,7 @@
     <button>Show my applications</button>
   </div>
   <form id="form"><input id="q" autocomplete="off" placeholder="e.g. SDET jobs remote in Canada"><button class="primary">Send</button></form>
+  <div class="err" id="err" hidden>Type a role and a place first, e.g. “SDET jobs remote in Canada”.</div>
 </div>
 
 <script>
@@ -127,7 +142,12 @@ function addMsg(who, html) {
 $("#form").onsubmit = async (e) => {
   e.preventDefault();
   const text = $("#q").value.trim();
-  if (!text) return;
+  if (!text) {
+    $("#form").classList.remove("empty"); void $("#form").offsetWidth; $("#form").classList.add("empty");
+    $("#err").hidden = false; $("#q").focus();
+    return;
+  }
+  $("#err").hidden = true; $("#form").classList.remove("empty");
   $("#q").value = "";
   ask(text);
 };
@@ -149,11 +169,13 @@ async function ask(text) {
       } else if (ev.type === "status") statusEl.textContent = ev.data;
       else if (ev.type === "job") { const card = jobCard(ev.data); jobs.set(ev.data.id, { ...ev.data, card }); cards.appendChild(card); scroll(); }
       else if (ev.type === "fit") { const j = jobs.get(ev.data.id); if (j) { j.fit = ev.data.score; showFit(j.card, ev.data); } }
+      else if (ev.type === "fit_error") { const j = jobs.get(ev.data.id); if (j) fitFailed(j.card, ev.data.error); }
       else if (ev.type === "say") { $(".status", bot).outerHTML = `<div>${esc(ev.data)}</div>`; }
       else if (ev.type === "ledger") { $(".status", bot).outerHTML = ledgerTable(ev.data); }
       else if (ev.type === "error") { $(".status", bot).innerHTML = `<span style="color:var(--red)">Something went wrong: ${esc(ev.data)}</span>`; }
       else if (ev.type === "end") {
-        $(".spin", bot)?.remove();
+        $(".status .spin", bot)?.remove();
+        for (const j of jobs.values()) if (j.fit === undefined && $(".fit .spin", j.card)) fitFailed(j.card, "no answer");
         if (!jobs.size) { statusEl.textContent += " Try widening it: drop the city, or add another title."; return; }
         const bulk = document.createElement("div");
         bulk.className = "bulk";
@@ -183,15 +205,23 @@ function jobCard(j) {
     <div><span class="fit"><span class="spin"></span>checking fit</span></div>
     <div class="why"></div>
     <div class="actions">
-      <button class="primary" data-a="submit">Apply</button>
-      <button data-a="dry" title="Fill the form and screenshot it without submitting">Dry run</button>
+      <button class="primary" data-a="submit" disabled title="Waiting for the fit check">Apply</button>
+      <button data-a="dry" disabled title="Fill the form and screenshot it without submitting">Dry run</button>
       <a class="ghost btn" href="${esc(j.url)}" target="_blank" rel="noopener">Posting ↗</a>
     </div>`;
   el.querySelectorAll("button[data-a]").forEach((b) => (b.onclick = () => apply(el, j.url, b.dataset.a, true)));
   return el;
 }
 
+function enable(card) { if (!card.applying) card.querySelectorAll("button[data-a]").forEach((b) => { b.disabled = false; b.title = b.dataset.a === "dry" ? "Fill the form and screenshot it without submitting" : ""; }); }
+function fitFailed(card, why) {
+  const pill = $(".fit", card);
+  pill.className = "fit na"; pill.textContent = "Fit not scored";
+  $(".why", card).innerHTML = `Couldn't score this one (${esc(why)}). Apply still scores it first and records the result.`;
+  enable(card);
+}
 function showFit(card, f) {
+  enable(card);
   const pill = $(".fit", card);
   pill.className = `fit ${f.score >= f.threshold ? "good" : "low"}`;
   pill.textContent = `Fit ${f.score}/10`;
@@ -200,6 +230,7 @@ function showFit(card, f) {
 }
 
 function apply(card, url, mode, manual) {
+  card.applying = true;
   card.querySelectorAll("button[data-a]").forEach((b) => (b.disabled = true));
   let p = $(".progress", card);
   if (!p) { p = document.createElement("div"); card.appendChild(p); }
@@ -208,9 +239,9 @@ function apply(card, url, mode, manual) {
   const line = $("span:last-child", p);
   post("/api/apply", { url, mode, manual }).then(({ id }) => listen(id, (ev) => {
     if (ev.type === "status") line.textContent = pretty(ev.data);
-    if (ev.type === "error") { p.className = "progress bad"; p.innerHTML = `✗ ${esc(ev.data)}`; card.querySelectorAll("button[data-a]").forEach((b) => (b.disabled = false)); }
+    if (ev.type === "error") { p.className = "progress bad"; p.innerHTML = `✗ ${esc(ev.data)}`; card.applying = false; enable(card); }
     if (ev.type === "result") {
-      const r = ev.data, details = `<a href="/dashboard#${encodeURIComponent(r.key)}" target="_blank">details</a>`;
+      const r = ev.data, details = `<a href="#" data-details="${esc(r.key)}">details</a>`;
       const map = {
         applied: ["ok", `✓ Applied. Fit ${r.score}/10. Tailored resume + cover letter sent. ${details}`],
         ready: ["warn", `Form filled (dry run), not submitted. ${details}`],
@@ -221,11 +252,57 @@ function apply(card, url, mode, manual) {
       const [cls, html] = map[r.status] ?? ["warn", `${esc(r.status)}: ${esc(r.reason)}`];
       p.className = `progress ${cls}`;
       p.innerHTML = html;
-      if (r.status !== "applied") card.querySelectorAll("button[data-a]").forEach((b) => (b.disabled = false));
+      p.querySelectorAll("[data-details]").forEach((a) => (a.onclick = (e) => { e.preventDefault(); toggleDetails(card, a.dataset.details); }));
+      if (r.status !== "applied") { card.applying = false; enable(card); }
       loadConfig();
     }
-  })).catch((e) => { p.className = "progress bad"; p.textContent = e.message; });
-  card.applying = true;
+  })).catch((e) => { p.className = "progress bad"; p.textContent = e.message; card.applying = false; enable(card); });
+}
+
+// ---- inline details: report, cover note, filled form, PDFs (no new tab) ----
+function md(src) {
+  if (!src) return '<p class="status">Nothing here.</p>';
+  const lines = esc(src).split("\n");
+  let html = "", inList = false, table = [];
+  const inline = (x) => x.replace(/\*\*(.+?)\*\*/g, "<b>$1</b>").replace(/(^|\s)_(.+?)_(?=\s|$)/g, "$1<i>$2</i>")
+    .replace(/\[([^\]]+)\]\((https?:[^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+  const flush = () => { if (!table.length) return; const rows = table.filter((r) => !/^\|[-| ]+\|$/.test(r.trim()));
+    html += "<table>" + rows.map((r, i) => "<tr>" + r.trim().replace(/^\||\|$/g, "").split("|").map((c) => i ? `<td>${inline(c.trim())}</td>` : `<th>${inline(c.trim())}</th>`).join("") + "</tr>").join("") + "</table>"; table = []; };
+  for (const l of lines) {
+    if (l.trim().startsWith("|")) { table.push(l); continue; } else flush();
+    const li = /^\s*(?:[-*]|\d+\.)\s+(.*)/.exec(l);
+    if (li) { if (!inList) { html += "<ul>"; inList = true; } html += `<li>${inline(li[1])}</li>`; continue; }
+    if (inList) { html += "</ul>"; inList = false; }
+    const h = /^(#{1,3})\s+(.*)/.exec(l);
+    if (h) html += `<h${h[1].length}>${inline(h[2])}</h${h[1].length}>`; else if (l.trim()) html += `<p>${inline(l)}</p>`;
+  }
+  flush(); if (inList) html += "</ul>";
+  return html;
+}
+async function toggleDetails(card, key) {
+  const old = $(".details", card);
+  if (old) { old.remove(); return; }
+  const box = document.createElement("div");
+  box.className = "details"; box.innerHTML = '<div class="status"><span class="spin"></span>Loading…</div>';
+  card.appendChild(box);
+  try {
+    const j = await (await fetch(`/api/job/${encodeURIComponent(key)}`)).json();
+    if (j.error) throw new Error(j.error);
+    const f = (name) => `/api/file/${encodeURIComponent(key)}/${encodeURIComponent(name)}`;
+    const pdfs = j.files.filter((x) => x.endsWith(".pdf")), shots = j.files.filter((x) => x.endsWith(".png"));
+    const panes = {
+      Report: md(j.report),
+      "Cover note": md(j.coverNote),
+      Form: (j.answers?.length ? `<table><tr><th>Field</th><th>Value</th><th>Source</th><th></th></tr>${j.answers.map((a) => `<tr><td>${esc(a.label)}${a.required ? " *" : ""}</td><td>${esc(a.value ?? "")}</td><td>${esc(a.source)}</td><td>${a.filled ? "✓" : "✗"}</td></tr>`).join("")}</table>` : '<p class="status">Form not opened.</p>') + shots.map((s) => `<p><img src="${f(s)}" alt="${esc(s)}"></p>`).join(""),
+      Briefing: md(j.briefing),
+    };
+    box.innerHTML = `<div class="files">${pdfs.map((x) => `<a href="${f(x)}" target="_blank" rel="noopener">📄 ${esc(x)}</a>`).join("")}<a href="/dashboard#${encodeURIComponent(key)}" target="_blank" rel="noopener">Dashboard (sparring) ↗</a></div>
+      <div class="tabs">${Object.keys(panes).map((k, i) => `<button type="button" class="${i ? "" : "on"}" data-p="${k}">${k}</button>`).join("")}</div><div class="pane">${panes.Report}</div>`;
+    box.querySelectorAll(".tabs button").forEach((b) => (b.onclick = () => {
+      box.querySelectorAll(".tabs button").forEach((x) => x.classList.toggle("on", x === b));
+      $(".pane", box).innerHTML = panes[b.dataset.p];
+    }));
+  } catch (e) { box.innerHTML = `<div class="status" style="color:var(--red)">${esc(e.message)}</div>`; }
 }
 
 function pretty(s) {
@@ -244,6 +321,7 @@ function ledgerTable(rows) {
 }
 
 loadConfig();
+$("#q").addEventListener("input", () => { $("#err").hidden = true; $("#form").classList.remove("empty"); });
 $("#q").focus();
 </script>
 </body>

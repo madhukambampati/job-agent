@@ -32,6 +32,32 @@ export interface AppDeps {
   ledgerPath?: string;
   boards?: BoardMemory;
   outRoot?: string;
+  fitConcurrency?: number;
+  fitTimeoutMs?: number;
+}
+
+function limiter(n: number) {
+  let active = 0;
+  const queue: (() => void)[] = [];
+  return <T>(fn: () => Promise<T>): Promise<T> =>
+    new Promise<T>((resolveP, rejectP) => {
+      const run = () => {
+        active++;
+        fn().then(resolveP, rejectP).finally(() => {
+          active--;
+          queue.shift()?.();
+        });
+      };
+      if (active < n) run();
+      else queue.push(run);
+    });
+}
+
+function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
+  return new Promise<T>((resolveP, rejectP) => {
+    const t = setTimeout(() => rejectP(new Error(`timed out after ${Math.round(ms / 1000)}s`)), ms);
+    p.then((v) => (clearTimeout(t), resolveP(v)), (e) => (clearTimeout(t), rejectP(e)));
+  });
 }
 
 type Event = { type: string; data: unknown };
@@ -81,20 +107,20 @@ export function createApp(deps: AppDeps): Server {
         }
         const resumeText = resumeForPrompt(parseResume(resumeMarkdown));
         const l = ledger();
-        const fits: Promise<unknown>[] = [];
-        let scoring = 0;
+        // Every card gets a fit score: a few at a time, each with a deadline, and a
+        // visible "fit_error" instead of a spinner that never stops.
+        const fits: Promise<void>[] = [];
+        const limit = limiter(deps.fitConcurrency ?? 4);
+        const threshold = profile.automation.scoreThreshold;
         await searchJobs(llm, q, { profile, fetcher: deps.fetcher, boards: deps.boards, isKnown: (id) => l.alreadyApplied(id) }, {
           status: (m) => emit(s, "status", m),
           job: (job) => {
             emit(s, "job", { id: job.id, url: job.url, title: job.title, company: job.company, location: job.location, compensation: job.compensation, ats: job.ats });
-            // Fit score for the first 10 cards, so you can see what Apply will do before clicking.
-            if (scoring++ < 10) {
-              fits.push(
-                scoreFit(llm, job, resumeText)
-                  .then((f) => emit(s, "fit", { id: job.id, score: f.score, summary: f.summary, gaps: f.gaps.slice(0, 3).map((g) => g.requirement), threshold: profile.automation.scoreThreshold }))
-                  .catch(() => {}),
-              );
-            }
+            fits.push(
+              limit(() => withTimeout(scoreFit(llm, job, resumeText), deps.fitTimeoutMs ?? 90_000))
+                .then((f) => emit(s, "fit", { id: job.id, score: f.score, summary: f.summary, gaps: f.gaps.slice(0, 3).map((g) => g.requirement), threshold }))
+                .catch((e: Error) => emit(s, "fit_error", { id: job.id, error: e.message })),
+            );
           },
         });
         await Promise.all(fits);

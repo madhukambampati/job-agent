@@ -1,8 +1,9 @@
+import { localDay } from "../dates.js";
 import type { LLM } from "../llm.js";
 import type { Briefing, Job } from "../types.js";
 
 const SYSTEM = `You are THE BRIEFING WRITER. You prepare a one-page company briefing for a candidate
-who is about to apply and may interview soon. Use web search. Today is ${new Date().toISOString().slice(0, 10)}.
+who is about to apply and may interview soon. Use web search. Today is ${localDay()}.
 
 Cover, in this order, as tight markdown (max ~450 words):
 ## What they do (2-3 lines)
