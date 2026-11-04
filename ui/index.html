@@ -1,0 +1,324 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>job-agent</title>
+<style>
+  :root {
+    --ink: #14213d; --navy: #1F3864; --muted: #5b6475; --line: #dfe3ea; --paper: #f6f4ef; --card: #fff;
+    --amber: #c77d0a; --amber-bg: #fdf3e1; --green: #1f7a4d; --green-bg: #e5f4ec; --red: #b4232c; --red-bg: #fbe9ea;
+    --blue-bg: #e8eef9; --radius: 10px;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, sans-serif; color: var(--ink); background: var(--paper); }
+  header { background: var(--navy); color: #fff; padding: 14px 24px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+  header h1 { margin: 0; font-size: 18px; letter-spacing: .3px; }
+  header .who { opacity: .8; font-size: 13px; }
+  header .chips { margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap; }
+  .chip { font-size: 12px; padding: 3px 10px; border-radius: 99px; background: rgba(255,255,255,.14); }
+  main { max-width: 1180px; margin: 0 auto; padding: 22px 20px 60px; display: grid; gap: 20px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px 20px; }
+  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .8px; color: var(--navy); margin: 0 0 12px; }
+  .run-row { display: flex; gap: 10px; flex-wrap: wrap; }
+  input[type=url], input[type=text], input[type=date], select, textarea {
+    font: inherit; border: 1px solid var(--line); border-radius: 8px; padding: 9px 11px; background: #fff; color: var(--ink);
+  }
+  input[type=url] { flex: 1 1 380px; }
+  textarea { width: 100%; min-height: 80px; resize: vertical; }
+  button { font: inherit; font-weight: 600; border: 1px solid var(--navy); background: #fff; color: var(--navy); border-radius: 8px; padding: 9px 14px; cursor: pointer; }
+  button.primary { background: var(--navy); color: #fff; }
+  button.danger { border-color: var(--red); background: var(--red); color: #fff; }
+  button:disabled { opacity: .5; cursor: default; }
+  .hint { color: var(--muted); font-size: 13px; margin-top: 8px; }
+  .steps { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; margin-top: 16px; }
+  .step { border: 1px solid var(--line); border-radius: 8px; padding: 10px; font-size: 13px; background: #fafbfc; }
+  .step b { display: block; font-size: 12px; text-transform: uppercase; letter-spacing: .6px; color: var(--muted); }
+  .step.active { border-color: var(--navy); background: var(--blue-bg); }
+  .step.active b { color: var(--navy); }
+  .step.active::after { content: " working…"; color: var(--navy); }
+  .step.done { border-color: var(--green); background: var(--green-bg); }
+  .step.done b { color: var(--green); }
+  .step.skip { opacity: .45; }
+  .log { font: 12px/1.6 ui-monospace, Menlo, monospace; background: #0f1729; color: #cfd8e6; border-radius: 8px; padding: 10px 12px; margin-top: 12px; max-height: 160px; overflow: auto; white-space: pre-wrap; }
+  .result { margin-top: 12px; padding: 12px 14px; border-radius: 8px; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th { text-align: left; font-size: 12px; text-transform: uppercase; letter-spacing: .6px; color: var(--muted); font-weight: 600; padding: 8px; border-bottom: 1px solid var(--line); }
+  td { padding: 10px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  tr.row { cursor: pointer; }
+  tr.row:hover td { background: #f8f9fb; }
+  tr.row.sel td { background: var(--blue-bg); }
+  .badge { display: inline-block; font-size: 12px; font-weight: 600; padding: 2px 9px; border-radius: 99px; background: #eef0f4; color: var(--muted); white-space: nowrap; }
+  .b-applied, .b-offer, .b-interviewing { background: var(--green-bg); color: var(--green); }
+  .b-needs_manual, .b-ready, .b-followed_up { background: var(--amber-bg); color: var(--amber); }
+  .b-failed, .b-rejected { background: var(--red-bg); color: var(--red); }
+  .score { font-weight: 700; }
+  .score.hi { color: var(--green); } .score.lo { color: var(--muted); }
+  .due { color: var(--amber); font-weight: 600; }
+  .empty { color: var(--muted); padding: 20px 0; text-align: center; }
+  .detail-head { display: flex; gap: 12px; align-items: baseline; flex-wrap: wrap; }
+  .detail-head h3 { margin: 0; font-size: 20px; }
+  .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin: 14px 0 16px; flex-wrap: wrap; }
+  .tab { border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: none; color: var(--muted); padding: 8px 12px; }
+  .tab.on { color: var(--navy); border-bottom-color: var(--navy); }
+  .md h1 { font-size: 20px; } .md h2 { font-size: 15px; text-transform: none; letter-spacing: 0; color: var(--ink); margin-top: 18px; } .md h3 { font-size: 14px; }
+  .md table { margin: 8px 0; } .md td, .md th { border: 1px solid var(--line); padding: 6px 8px; }
+  .md a { color: var(--navy); }
+  .files { display: flex; gap: 8px; flex-wrap: wrap; }
+  .files a { text-decoration: none; border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; color: var(--navy); background: #fafbfc; font-size: 14px; }
+  .shot { max-width: 100%; border: 1px solid var(--line); border-radius: 8px; margin-top: 12px; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .gap { border-left: 3px solid var(--line); padding: 4px 10px; margin: 6px 0; }
+  .gap.dealbreaker { border-color: var(--red); } .gap.major { border-color: var(--amber); }
+  .q { border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; margin-bottom: 10px; }
+  .q.weak { border-color: var(--amber); background: var(--amber-bg); }
+  .q .meta { font-size: 12px; color: var(--muted); }
+  .grade { margin-top: 8px; font-size: 14px; }
+  .edit-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 12px; }
+  .edit-row input[type=text] { flex: 1 1 240px; }
+  @media (max-width: 760px) { .steps { grid-template-columns: repeat(3, 1fr); } .grid2 { grid-template-columns: 1fr; } .hide-sm { display: none; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>job-agent</h1><span class="who" id="who"></span>
+  <div class="chips" id="chips"></div>
+</header>
+<main>
+  <section class="card">
+    <h2>Apply to a job</h2>
+    <div class="run-row">
+      <input type="url" id="url" placeholder="Paste a Greenhouse, Lever or Ashby job link">
+      <select id="mode" title="What should happen at the end">
+        <option value="dry">Dry run: fill form, don't submit</option>
+        <option value="submit">Apply: submit if fit ≥ threshold</option>
+        <option value="prepare">Prepare docs only</option>
+      </select>
+      <button class="primary" id="go">Run</button>
+    </div>
+    <div class="hint" id="hint">Start with a dry run. It fills the employer's form and screenshots it without clicking submit.</div>
+    <div class="steps" id="steps"></div>
+    <div class="log" id="log" hidden></div>
+    <div class="result" id="result" hidden></div>
+  </section>
+
+  <section class="card">
+    <h2>Ledger</h2>
+    <div id="ledger"></div>
+  </section>
+
+  <section class="card" id="detail" hidden></section>
+</main>
+
+<script>
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+const api = async (path, opts) => {
+  const r = await fetch(path, opts && { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(opts) });
+  const j = await r.json();
+  if (!r.ok) throw new Error(j.error || r.statusText);
+  return j;
+};
+const today = () => new Date().toISOString().slice(0, 10);
+
+// ---- tiny markdown -> html (headings, lists, bold, italics, links, tables) ----
+function md(src) {
+  if (!src) return '<p class="hint">Nothing here yet.</p>';
+  const lines = esc(src).split("\n");
+  let html = "", inList = false, table = [];
+  const inline = (s) => s.replace(/\*\*(.+?)\*\*/g, "<b>$1</b>").replace(/(^|\s)_(.+?)_(?=\s|$)/g, "$1<i>$2</i>")
+    .replace(/\[([^\]]+)\]\((https?:[^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+  const flushTable = () => {
+    if (!table.length) return;
+    const rows = table.filter((r) => !/^\|[-| ]+\|$/.test(r.trim()));
+    html += "<table>" + rows.map((r, i) => "<tr>" + r.trim().replace(/^\||\|$/g, "").split("|").map((c) => i ? `<td>${inline(c.trim())}</td>` : `<th>${inline(c.trim())}</th>`).join("") + "</tr>").join("") + "</table>";
+    table = [];
+  };
+  for (const l of lines) {
+    if (l.trim().startsWith("|")) { table.push(l); continue; } else flushTable();
+    const li = /^\s*(?:[-*]|\d+\.)\s+(.*)/.exec(l);
+    if (li) { if (!inList) { html += "<ul>"; inList = true; } html += `<li>${inline(li[1])}</li>`; continue; }
+    if (inList) { html += "</ul>"; inList = false; }
+    const h = /^(#{1,3})\s+(.*)/.exec(l);
+    if (h) html += `<h${h[1].length}>${inline(h[2])}</h${h[1].length}>`;
+    else if (l.trim()) html += `<p>${inline(l)}</p>`;
+  }
+  flushTable();
+  if (inList) html += "</ul>";
+  return `<div class="md">${html}</div>`;
+}
+
+// ---- header ----
+async function loadConfig() {
+  try {
+    const c = await api("/api/config");
+    $("#who").textContent = c.name;
+    $("#chips").innerHTML = [
+      `<span class="chip">Applied today ${c.appliedToday}/${c.dailyCap}</span>`,
+      `<span class="chip">Fit threshold ${c.threshold}/10</span>`,
+      `<span class="chip">Auto-submit ${c.autoSubmit ? "on" : "off"}</span>`,
+      c.hasKey ? "" : `<span class="chip" style="background:#b4232c">No API key in .env</span>`,
+    ].join("");
+  } catch (e) {
+    $("#chips").innerHTML = `<span class="chip" style="background:#b4232c">${esc(e.message)}</span>`;
+  }
+}
+
+// ---- run + live progress ----
+const STEPS = [["filter", "Filter"], ["briefing", "Briefing"], ["editor", "Editor"], ["sparring", "Sparring"], ["submit", "Submit"], ["ledger", "Ledger"]];
+function setSteps(state) {
+  $("#steps").innerHTML = STEPS.map(([k, label]) => `<div class="step ${state[k] || ""}"><b>${label}</b></div>`).join("");
+}
+setSteps({});
+
+$("#go").onclick = async () => {
+  const url = $("#url").value.trim(), mode = $("#mode").value;
+  if (mode === "submit" && !confirm("This will submit the application for real if every check passes. Continue?")) return;
+  $("#go").disabled = true;
+  $("#log").hidden = false; $("#log").textContent = ""; $("#result").hidden = true;
+  const st = { filter: "active" };
+  setSteps(st);
+  try {
+    const { id } = await api("/api/run", { url, mode });
+    const es = new EventSource(`/api/run/${id}/events`);
+    es.onmessage = (m) => {
+      const ev = JSON.parse(m.data);
+      if (ev.type === "log") {
+        $("#log").textContent += "· " + ev.data + "\n";
+        $("#log").scrollTop = 1e9;
+        if (/briefing \+ editor/.test(ev.data)) Object.assign(st, { filter: "done", briefing: "active", editor: "active", sparring: "active" });
+        if (/submitter/.test(ev.data)) Object.assign(st, { briefing: "done", editor: "done", sparring: "done", submit: "active" });
+        setSteps(st);
+        return;
+      }
+      es.close();
+      $("#go").disabled = false;
+      const box = $("#result"); box.hidden = false;
+      if (ev.type === "error") {
+        for (const k in st) if (st[k] === "active") st[k] = "";
+        setSteps(st);
+        box.style.background = "var(--red-bg)"; box.innerHTML = `<b>Error.</b> ${esc(ev.data)}`;
+        return;
+      }
+      const r = ev.data;
+      const skipped = r.status === "skipped";
+      for (const [k] of STEPS) st[k] = skipped && k !== "filter" && k !== "ledger" ? "skip" : "done";
+      if (["needs_manual", "failed", "ready"].includes(r.status) || mode !== "submit") st.submit = mode === "prepare" ? "skip" : st.submit;
+      setSteps(st);
+      const bg = r.status === "applied" ? "var(--green-bg)" : skipped ? "#eef0f4" : r.status === "failed" ? "var(--red-bg)" : "var(--amber-bg)";
+      box.style.background = bg;
+      box.innerHTML = `<b>${esc(r.company)} · ${esc(r.title)}</b> — <span class="badge b-${r.status}">${r.status.replace("_", " ")}</span> fit ${r.score ?? "–"}/10<br>${esc(r.reason)}`;
+      loadLedger().then(() => openJob(r.key));
+      loadConfig();
+    };
+  } catch (e) {
+    $("#go").disabled = false;
+    $("#result").hidden = false; $("#result").style.background = "var(--red-bg)"; $("#result").textContent = e.message;
+    setSteps({});
+  }
+};
+
+// ---- ledger ----
+let rows = [], selected = null;
+async function loadLedger() {
+  rows = await api("/api/ledger");
+  if (!rows.length) { $("#ledger").innerHTML = '<div class="empty">No roles yet. Run one above.</div>'; return; }
+  $("#ledger").innerHTML = `<table><thead><tr><th>Company / role</th><th>Fit</th><th>Status</th><th class="hide-sm">Applied</th><th>Next step</th></tr></thead><tbody>${rows.map((r) => {
+    const due = r.nextStepDate && r.nextStepDate <= today() && !["rejected", "withdrawn", "skipped"].includes(r.status);
+    return `<tr class="row ${r.key === selected ? "sel" : ""}" data-key="${esc(r.key)}">
+      <td><b>${esc(r.company)}</b><br><span class="hint" style="margin:0">${esc(r.title)}</span></td>
+      <td class="score ${r.score >= 7 ? "hi" : "lo"}">${r.score ?? "–"}</td>
+      <td><span class="badge b-${r.status}">${r.status.replace("_", " ")}</span></td>
+      <td class="hide-sm">${r.appliedAt ? r.appliedAt.slice(0, 10) : ""}</td>
+      <td>${esc(r.nextStep).slice(0, 70)}${r.nextStepDate ? `<br><span class="${due ? "due" : "hint"}" style="margin:0">${due ? "Due " : ""}${r.nextStepDate}</span>` : ""}</td></tr>`;
+  }).join("")}</tbody></table>`;
+  document.querySelectorAll("tr.row").forEach((tr) => (tr.onclick = () => openJob(tr.dataset.key)));
+}
+
+// ---- job detail ----
+let job = null, tab = "report";
+async function openJob(key) {
+  selected = key;
+  document.querySelectorAll("tr.row").forEach((tr) => tr.classList.toggle("sel", tr.dataset.key === key));
+  job = await api(`/api/job/${encodeURIComponent(key)}`);
+  renderJob();
+  $("#detail").scrollIntoView({ behavior: "smooth", block: "start" });
+}
+const fileUrl = (name) => `/api/file/${encodeURIComponent(job.row.key)}/${encodeURIComponent(name)}`;
+
+function renderJob() {
+  const r = job.row, d = $("#detail");
+  d.hidden = false;
+  const tabs = [["report", "Report"], ["fit", "Fit & gaps"], ["briefing", "Briefing"], ["cover", "Cover note"], ["spar", "Sparring"], ["form", "Form"]];
+  d.innerHTML = `
+    <div class="detail-head"><h3>${esc(r.company)} · ${esc(r.title)}</h3><span class="badge b-${r.status}">${r.status.replace("_", " ")}</span><a href="${esc(r.url)}" target="_blank" rel="noopener">posting ↗</a></div>
+    <div class="edit-row">
+      <select id="st">${["applied", "followed_up", "interviewing", "offer", "rejected", "withdrawn", "needs_manual", "ready", "skipped", "failed"].map((s) => `<option ${s === r.status ? "selected" : ""}>${s}</option>`).join("")}</select>
+      <input type="text" id="next" value="${esc(r.nextStep)}" placeholder="Next step">
+      <input type="date" id="nextDate" value="${esc(r.nextStepDate || "")}">
+      <button id="save">Update ledger</button>
+    </div>
+    <div class="tabs">${tabs.map(([k, l]) => `<button class="tab ${k === tab ? "on" : ""}" data-t="${k}">${l}</button>`).join("")}</div>
+    <div id="pane"></div>`;
+  d.querySelectorAll(".tab").forEach((b) => (b.onclick = () => { tab = b.dataset.t; renderJob(); }));
+  $("#save").onclick = async () => {
+    await api(`/api/ledger/${encodeURIComponent(r.key)}`, { status: $("#st").value, nextStep: $("#next").value, nextStepDate: $("#nextDate").value });
+    await loadLedger(); openJob(r.key);
+  };
+  const pane = $("#pane");
+  const pdfs = job.files.filter((f) => f.endsWith(".pdf"));
+  if (tab === "report") {
+    pane.innerHTML = `<div class="files">${pdfs.map((f) => `<a href="${fileUrl(f)}" target="_blank">📄 ${esc(f)}</a>`).join("") || '<span class="hint">No documents (skipped before tailoring).</span>'}</div>${md(job.report)}`;
+  } else if (tab === "fit") {
+    const f = job.fit;
+    pane.innerHTML = f ? `<p><span class="score ${f.score >= 7 ? "hi" : "lo"}" style="font-size:28px">${f.score}/10</span> ${esc(f.summary)}</p>
+      <div class="grid2"><div><h2>Strengths</h2>${f.strengths.map((s) => `<div class="gap" style="border-color:var(--green)">${esc(s)}</div>`).join("")}</div>
+      <div><h2>Gaps</h2>${f.gaps.map((g) => `<div class="gap ${g.severity}"><b>${esc(g.requirement)}</b> <span class="hint">${g.severity}</span><br>${esc(g.note)}</div>`).join("") || '<p class="hint">None</p>'}</div></div>
+      ${job.edit?.rejected?.length ? `<h2 style="margin-top:16px">Honesty guard removed</h2>${job.edit.rejected.map((x) => `<div class="gap major"><b>${esc(x.where)}</b>: ${esc(x.reason)}<br><span class="hint">${esc(x.text)}</span></div>`).join("")}` : ""}`
+      : '<p class="hint">Skipped by hard rules before scoring.</p>';
+  } else if (tab === "briefing") pane.innerHTML = md(job.briefing);
+  else if (tab === "cover") pane.innerHTML = job.coverNote ? `${md(job.coverNote)}<button id="copy">Copy</button>` : md(null);
+  else if (tab === "form") {
+    const shots = job.files.filter((f) => f.endsWith(".png"));
+    pane.innerHTML = (job.answers?.length ? `<table><tr><th>Field</th><th>Value</th><th>Source</th><th>Filled</th></tr>${job.answers.map((a) => `<tr><td>${esc(a.label)}${a.required ? " *" : ""}</td><td>${esc(a.value ?? "")}</td><td>${a.source}</td><td>${a.filled ? "✓" : "✗"}</td></tr>`).join("")}</table>` : '<p class="hint">The form was not opened for this job.</p>') +
+      shots.map((s) => `<a href="${fileUrl(s)}" target="_blank"><img class="shot" src="${fileUrl(s)}" alt="${esc(s)}"></a>`).join("");
+  } else if (tab === "spar") renderSpar(pane);
+  const copy = $("#copy");
+  if (copy) copy.onclick = () => navigator.clipboard.writeText(job.coverNote).then(() => (copy.textContent = "Copied"));
+}
+
+// ---- sparring: answer, get scored, get grilled on the weakest ----
+const spar = {};
+function renderSpar(pane) {
+  const qs = job.questions?.questions;
+  if (!qs) { pane.innerHTML = '<p class="hint">No questions for this job (it was skipped).</p>'; return; }
+  const st = (spar[job.row.key] ??= qs.map((q) => ({ q: q.question, history: "", grade: null, followUp: null })));
+  const graded = st.filter((s) => s.grade);
+  const weakest = graded.length ? graded.reduce((m, s) => (s.grade.score < m.grade.score ? s : m)) : null;
+  pane.innerHTML = `<p class="hint">Answer like you would out loud. Each answer gets scored; the weakest one is highlighted and keeps getting follow-ups until it reaches 8.</p>` +
+    st.map((s, i) => `<div class="q ${s === weakest && s.grade.score < 8 ? "weak" : ""}">
+      <div class="meta">Q${i + 1} · ${esc(qs[i].category)} · ${esc(qs[i].whyTheyAsk)}</div>
+      <div><b>${esc(s.followUp || s.q)}</b>${s.followUp ? ' <span class="badge">follow-up</span>' : ""}</div>
+      ${s.grade ? `<div class="grade"><span class="score ${s.grade.score >= 8 ? "hi" : "lo"}">${s.grade.score}/10</span> · ${esc(s.grade.weakness)}</div>` : ""}
+      ${s.grade && s.grade.score >= 8 && s.followUp ? "" : `<textarea data-i="${i}" placeholder="Your answer"></textarea><button data-i="${i}">Grade answer</button>`}
+    </div>`).join("");
+  pane.querySelectorAll("button[data-i]").forEach((b) => (b.onclick = async () => {
+    const i = +b.dataset.i, s = st[i];
+    const answer = pane.querySelector(`textarea[data-i="${i}"]`).value.trim();
+    if (!answer) return;
+    b.disabled = true; b.textContent = "Grading…";
+    try {
+      const question = s.followUp || s.q;
+      const g = await api("/api/spar", { key: job.row.key, question, answer, history: s.history });
+      s.history += `\nQ: ${question}\nA: ${answer}\nWeakness: ${g.weakness}`;
+      s.grade = g; s.followUp = g.score < 8 ? g.followUp : s.followUp;
+    } catch (e) { alert(e.message); }
+    renderSpar(pane);
+  }));
+}
+
+loadConfig();
+loadLedger();
+</script>
+</body>
+</html>

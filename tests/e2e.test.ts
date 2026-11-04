@@ -130,6 +130,14 @@ describe("submitter against local application forms", () => {
   });
 });
 
+describe("runs under tsx like the real CLI", () => {
+  it("scans a form without the __name ReferenceError", async () => {
+    const { execFileSync } = await import("node:child_process");
+    const out = execFileSync("npx", ["tsx", "tests/tsx-scan.ts"], { encoding: "utf8", env: process.env });
+    expect(JSON.parse(out.trim().split("\n").pop()!).count).toBeGreaterThan(8);
+  }, 60000);
+});
+
 describe("ashby", () => {
   it("fills but never auto-submits on Ashby", async () => {
     const browser = await launchBrowser();

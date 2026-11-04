@@ -6,3 +6,4 @@ config/resume.md
 data/
 out/
 *.log
+data-demo/

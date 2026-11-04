@@ -49,6 +49,17 @@ Fill in `.env` (`ANTHROPIC_API_KEY`), `config/profile.yaml`, and `config/resume.
 
 ## Use
 
+### Web UI
+
+```bash
+npm run ui      # http://localhost:3000 — paste a job link, watch the agents, browse the ledger, spar
+npm run demo    # same UI on sample data (fake model, local fake form): safe to click around
+```
+
+The UI only listens on localhost. Agents, the browser and your resume all stay on your machine.
+
+### CLI
+
 ```bash
 # score only: fit 1-10 + gaps
 npx tsx src/cli.ts score https://job-boards.greenhouse.io/acme/jobs/123

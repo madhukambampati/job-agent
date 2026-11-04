@@ -7,7 +7,17 @@ import type { FormField } from "./answers.js";
  * if the ATS re-renders. Works across Greenhouse, Lever and Ashby because it
  * reads labels the way a screen reader would, not ATS-specific selectors.
  */
+/**
+ * tsx/esbuild (keepNames) wraps named functions in a `__name(...)` helper that
+ * only exists in Node. Functions shipped into the page via evaluate() then
+ * throw "ReferenceError: __name is not defined", so define a no-op in the page.
+ */
+async function ensureNameShim(page: Page): Promise<void> {
+  await page.evaluate("window.__name = window.__name || function (f) { return f; }");
+}
+
 export async function scanForm(page: Page): Promise<FormField[]> {
+  await ensureNameShim(page);
   return page.evaluate(() => {
     const clean = (s: string | null | undefined) => (s ?? "").replace(/\s+/g, " ").replace(/\*$/, "").trim();
     const visible = (el: Element) => {
