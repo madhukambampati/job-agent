@@ -1,0 +1,8 @@
+node_modules/
+dist/
+.env
+config/profile.yaml
+config/resume.md
+data/
+out/
+*.log

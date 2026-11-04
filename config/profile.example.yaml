@@ -1,0 +1,45 @@
+# Copy to config/profile.yaml (`npx job-agent init`). config/profile.yaml is gitignored.
+firstName: Alex
+lastName: Rivera
+email: alex@example.com
+phone: "+1 555 010 0000"
+city: Toronto
+region: Ontario
+country: Canada
+postalCode: ""
+linkedin: https://www.linkedin.com/in/example
+github: https://github.com/example
+website: ""
+currentCompany: Example Corp
+currentTitle: Senior SDET
+yearsOfExperience: 8
+
+workAuthorization:
+  authorizedCountries: [Canada]
+  requiresSponsorship: false
+
+salary:
+  floor: 90000          # postings that top out below this are skipped
+  currency: CAD
+  expected: "120,000 CAD"
+
+search:
+  remoteOnly: true
+  acceptableLocations: []           # e.g. [Toronto, Kitchener] to allow hybrid there
+  excludeEmploymentTypes: [contract, temporary, fixed-term, freelance, internship]
+  excludeTitleKeywords: [intern, junior]
+
+automation:
+  scoreThreshold: 7     # the filter skips anything below this
+  autoSubmit: true      # false = prepare everything, you click submit
+  dailyCap: 15
+  noticePeriod: "2 weeks"
+  willingToRelocate: false
+
+# Answers the submitter may reuse. Key = text that appears in the question label.
+answers:
+  "how did you hear": "LinkedIn"
+  "previously worked for": "No"
+  "previously applied": "No"
+
+resumePath: resume.md   # relative to this file
