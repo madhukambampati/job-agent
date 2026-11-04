@@ -27,10 +27,17 @@ export interface Documents {
 const yesNo = (b: boolean) => (b ? "Yes" : "No");
 
 /** Deterministic mapping for the questions every ATS asks. Ordered: first match wins. */
-function ruleFor(p: Profile, d: Documents): Array<[RegExp, string | ((f: FormField) => string | null)]> {
+type Rule = [RegExp, string | ((f: FormField) => string | null)];
+
+/**
+ * Field-name rules ("City", "Email", "State/Province"): only for short labels.
+ * A long question that merely contains one of these words ("...please state the
+ * level") must not be answered with profile data.
+ */
+const FIELD_NAME_MAX_WORDS = 6;
+
+function fieldRules(p: Profile): Rule[] {
   return [
-    [/resume|cv\b|curriculum/i, (f) => (f.kind === "file" ? d.resumePdf : null)],
-    [/cover\s*letter/i, (f) => (f.kind === "file" ? d.coverLetterPdf : d.coverNote)],
     [/^first\s*name|given name|legal first/i, p.firstName],
     [/^last\s*name|surname|family name|legal last/i, p.lastName],
     [/preferred\s*(first\s*)?name/i, p.firstName],
@@ -46,14 +53,24 @@ function ruleFor(p: Profile, d: Documents): Array<[RegExp, string | ((f: FormFie
     [/^city\b|city of residence/i, p.city],
     [/province|state\b|region/i, p.region],
     [/^country\b|country of residence/i, p.country],
-    [/^location|where are you (located|based)|current location/i, `${p.city}, ${p.region}, ${p.country}`],
+    [/^location|current location/i, `${p.city}, ${p.region}, ${p.country}`],
+  ];
+}
+
+/** Question rules: matched on full questions, so each pattern is specific to one question. */
+function questionRules(p: Profile, d: Documents): Rule[] {
+  return [
+    // Uploads are recognised by field type, so the label can be any length.
+    [/resume|cv\b|curriculum/i, (f) => (f.kind === "file" ? d.resumePdf : null)],
+    [/cover\s*letter/i, (f) => (f.kind === "file" ? d.coverLetterPdf : d.coverNote)],
+    [/where are you (currently )?(located|based)/i, `${p.city}, ${p.region}, ${p.country}`],
     [/(require|need).*(sponsor|visa)|sponsorship/i, yesNo(p.workAuthorization.requiresSponsorship)],
     [
       /(legally )?(authori[sz]ed|eligible|permitted).*work/i,
       (f) => {
         const countries = p.workAuthorization.authorizedCountries.map((c) => c.toLowerCase());
         const mentioned = countries.some((c) => f.label.toLowerCase().includes(c));
-        const anyCountry = /(us|united states|canada|uk|u\.s\.)/i.test(f.label);
+        const anyCountry = /\b(us|usa|united states|canada|uk|united kingdom|u\.s\.)\b/i.test(f.label);
         if (anyCountry && !mentioned) return "No";
         return "Yes";
       },
@@ -77,7 +94,9 @@ export function deterministicAnswer(field: FormField, p: Profile, d: Documents):
     if (!field.required) return { fieldId: field.id, value: null, source: "profile" };
   }
 
-  for (const [re, val] of ruleFor(p, d)) {
+  const words = label.replace(/\(optional\)|\*/gi, "").trim().split(/\s+/).length;
+  const rules = [...questionRules(p, d).slice(0, 2), ...(words <= FIELD_NAME_MAX_WORDS ? fieldRules(p) : []), ...questionRules(p, d).slice(2)];
+  for (const [re, val] of rules) {
     if (!re.test(label)) continue;
     const v = typeof val === "function" ? val(field) : val;
     if (v === null || v === "") continue;

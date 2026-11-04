@@ -155,3 +155,22 @@ describe("structured-output schema conversion", async () => {
     expect(normalizeEnums({ severity: "Major" }, { properties: { severity: { enum: ["major", "minor"] } } })).toEqual({ severity: "major" });
   });
 });
+
+describe("answer rules don't misfire on long questions (found by the sandbox)", async () => {
+  const { deterministicAnswer } = await import("../src/submit/answers.js");
+  const docs = { resumePdf: "/r.pdf", coverLetterPdf: "/c.pdf", coverNote: "note" };
+  const f = (label: string, kind: any = "text", options: string[] = []) => ({ id: "x", label, kind, required: true, options });
+  it("a clearance question containing 'state' is not answered with the province", () => {
+    expect(deterministicAnswer(f("Do you currently hold an active Canadian government security clearance? Please state the level."), profile, docs)).toBeNull();
+  });
+  it("short field names still work", () => {
+    expect(deterministicAnswer(f("State/Province"), profile, docs)?.value).toBe("Ontario");
+    expect(deterministicAnswer(f("City"), profile, docs)?.value).toBe("Toronto");
+  });
+  it("'status' doesn't count as 'US' in work-authorization questions", () => {
+    expect(deterministicAnswer(f("Are you legally authorized to work in Canada? (citizenship status)", "select", ["Yes", "No"]), profile, docs)?.value).toBe("Yes");
+  });
+  it("long upload labels still get the resume", () => {
+    expect(deterministicAnswer(f("Please upload your most recent resume or CV (PDF preferred, max 5MB)", "file"), profile, docs)?.value).toBe("/r.pdf");
+  });
+});

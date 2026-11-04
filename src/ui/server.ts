@@ -34,6 +34,8 @@ export interface AppDeps {
   outRoot?: string;
   fitConcurrency?: number;
   fitTimeoutMs?: number;
+  /** Set in sandbox mode: dummy jobs, local employer forms. */
+  sandbox?: { inboxUrl: string; mode: string };
 }
 
 function limiter(n: number) {
@@ -134,7 +136,14 @@ export function createApp(deps: AppDeps): Server {
   function startApply(url: string, mode: "submit" | "dry", s: Stream, userConfirmed = false) {
     emit(s, "status", "Queued");
     applyChain = applyChain.then(async () => {
-      const browser = await deps.launch();
+      // A browser that won't start fails this one application, not the whole server.
+      let browser: Browser;
+      try {
+        browser = await deps.launch();
+      } catch (e) {
+        emit(s, "error", `Couldn't start the browser: ${(e as Error).message.split("\n")[0]}. Run: npx playwright install chromium`, true);
+        return;
+      }
       try {
         const { profile, resumeMarkdown } = deps.load();
         const r = await runJob(url, { llm: deps.llm(), profile, resumeMarkdown, ledger: ledger(), browser }, {
@@ -191,7 +200,7 @@ export function createApp(deps: AppDeps): Server {
         }
         let hasKey = true;
         try { deps.llm(); } catch { hasKey = false; }
-        return json(res, 200, { name, threshold, autoSubmit, dailyCap, appliedToday: ledger().appliedToday(), hasKey, problem });
+        return json(res, 200, { name, threshold, autoSubmit, dailyCap, appliedToday: ledger().appliedToday(), hasKey, problem, sandbox: deps.sandbox ?? null });
       }
 
       if (POST && u.pathname === "/api/chat") {

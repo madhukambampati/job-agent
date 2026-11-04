@@ -65,9 +65,30 @@ Type what you want, e.g. *"SDET or QA automation jobs, remote in Canada"*. The b
 
 `/dashboard` has the ledger, per-job briefing, cover note, form answers, PDFs and the sparring drill.
 
+### Sandbox (try everything on dummy jobs first)
+
 ```bash
-npm run demo    # the same chat on a fake job market + fake form: no API key, nothing real is sent
+npm run sandbox             # your profile + resume, real Claude, dummy jobs and employer forms
+npm run sandbox -- --offline  # no API key needed; rough keyword scoring
+npm run sandbox -- --reset    # start with an empty sandbox ledger and inbox
 ```
+
+Search returns only fictional sandbox companies; **Apply really fills and submits** their forms, but the
+forms are served from your machine. The yellow bar links to the **employer inbox**, which shows every
+application exactly as the "employer" received it, with the uploaded resume and cover letter. The dummy
+market is built so each case shows up at least once:
+
+| Case | Sandbox posting |
+|---|---|
+| Submits (Greenhouse / Lever style forms) | Maplewave, Northpine, Aurora Labs, EvalForge, Quillmind |
+| Ashby: filled, you click Submit | Frostbyte |
+| Captcha: stops and asks you | Cedarloop |
+| Required question you can't answer from your facts | Polaris Defence Systems |
+| Low fit: skipped by Apply-to-all | Lakeshore Analytics |
+| Filtered out of "remote in Canada" | Sunbeam (California, hybrid), Pampa Tech (LATAM), Globex (US), Initrode (contract), Budget Books (pay), Ottawa Tech / Harbour / King West (hybrid) |
+| Closed search hit | one Maplewave URL |
+
+Sandbox data lives in `data-sandbox/`, separate from your real ledger. Web search is never called in sandbox.
 
 The UI only listens on localhost. Agents, the browser and your resume all stay on your machine.
 

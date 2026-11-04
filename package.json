@@ -12,7 +12,8 @@
     "test": "vitest run",
     "dev": "tsx src/cli.ts",
     "ui": "tsx src/ui/server.ts",
-    "demo": "tsx scripts/demo.ts"
+    "demo": "tsx src/sandbox/run.ts --offline",
+    "sandbox": "tsx src/sandbox/run.ts"
   },
   "engines": {
     "node": ">=20"

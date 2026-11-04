@@ -68,6 +68,14 @@ function ashbyLocation(j: any): string {
   return [...new Set(places)].join(" / ") + [remote ? "Remote" : "", /hybrid/i.test(wt) ? "Hybrid" : "", /onsite|on-site/i.test(wt) ? "On-site" : ""].filter(Boolean).map((x) => ` · ${x}`).join("");
 }
 
+function isLocalUrl(u: unknown): u is string {
+  try {
+    return typeof u === "string" && ["127.0.0.1", "localhost", "[::1]"].includes(new URL(u).hostname);
+  } catch {
+    return false;
+  }
+}
+
 /** A posting the ATS says no longer exists (404/410, or missing from its board). */
 export class PostingClosedError extends Error {}
 
@@ -102,7 +110,8 @@ export async function fetchJob(url: string, fetcher: Fetcher = fetch as unknown 
       description: htmlToText(d.content ?? ""),
       url,
       // Company career pages often iframe the form; the hosted board page is the reliable form.
-      applyUrl: `https://job-boards.greenhouse.io/${p.board}/jobs/${p.jobId}`,
+      // A local absolute_url is the sandbox employer's form, so use it as-is.
+      applyUrl: isLocalUrl(d.absolute_url) ? d.absolute_url : `https://job-boards.greenhouse.io/${p.board}/jobs/${p.jobId}`,
       compensation: pay || undefined,
       questions,
     };
