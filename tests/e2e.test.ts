@@ -104,7 +104,7 @@ describe("submitter against local application forms", () => {
     const r = await runJob("https://jobs.lever.co/testco/abc", deps, { fetcher, outRoot: dir });
     expect(r.status).toBe("applied");
     expect(ledger.get("lever:testco:abc")).toMatchObject({ status: "applied", score: 8, nextStep: expect.stringMatching(/Follow up/) });
-    for (const f of ["briefing.md", "questions.md", "cover-note.md", "report.md", "form.png", "alex-rivera-resume.pdf"]) {
+    for (const f of ["briefing.md", "questions.md", "cover-note.md", "report.md", "form.png", "Alex_Rivera_Resume.pdf"]) {
       expect(existsSync(join(r.outDir!, f))).toBe(true);
     }
     // Editor's "Jenkins" rewrite is not in the resume, so the guard must drop it.
@@ -127,5 +127,22 @@ describe("submitter against local application forms", () => {
     const r = await runJob("https://jobs.lever.co/testco/low", { llm, profile, resumeMarkdown: RESUME_MD, ledger, browser }, { fetcher, outRoot: dir });
     expect(r.status).toBe("skipped");
     expect(llm.calls.map((c) => c.tool)).toEqual(["record_fit"]);
+  });
+});
+
+describe("ashby", () => {
+  it("fills but never auto-submits on Ashby", async () => {
+    const browser = await launchBrowser();
+    const srv = await startFormServer({ "/a": FORM_HAPPY });
+    try {
+      const j = { ...job(`${srv.url}/a`), ats: "ashby" as const };
+      const out = await submitApplication(browser, fake(9), j, profile, docs, { dryRun: false, screenshotPath: join(mkdtempSync(join(tmpdir(), "s-")), "f.png"), facts: "" });
+      expect(out.status).toBe("needs_manual");
+      expect(out.answers.filter((a) => a.filled).length).toBeGreaterThan(5);
+      expect(srv.submissions.length).toBe(0);
+    } finally {
+      await browser.close();
+      srv.server.close();
+    }
   });
 });

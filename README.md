@@ -78,7 +78,7 @@ Each job gets a folder in `out/` with `fit.json`, `briefing.md`, tailored resume
 |---|---|---|
 | Greenhouse | public Job Board API (incl. application questions) | yes |
 | Lever | public Postings API | yes |
-| Ashby | public Posting API | yes |
+| Ashby | public Posting API | fills only: Ashby flagged an automated submit as spam in testing, so you click Submit |
 | Anything else | page text | no: documents prepared, status `needs_manual` |
 
 LinkedIn Easy Apply and Workday are deliberately not automated: both actively block bots and an account ban costs more than a few applications.

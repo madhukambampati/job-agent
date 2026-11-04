@@ -93,8 +93,10 @@ export async function runJob(
   writeFileSync(join(outDir, "edit.json"), JSON.stringify(edit, null, 2));
 
   const roles = applyEdits(resume, edit.output);
-  const resumePdf = join(outDir, `${slug(fullName(profile))}-resume.pdf`);
-  const coverLetterPdf = join(outDir, `${slug(fullName(profile))}-cover-letter.pdf`);
+  // Recruiters see the uploaded file name, so it reads like a person sent it.
+  const fileStem = fullName(profile).replace(/[^A-Za-z0-9]+/g, "_").replace(/^_|_$/g, "");
+  const resumePdf = join(outDir, `${fileStem}_Resume.pdf`);
+  const coverLetterPdf = join(outDir, `${fileStem}_Cover_Letter.pdf`);
   await htmlToPdf(browser, resumeHtml(resume, roles, edit.output.summary), resumePdf);
   await htmlToPdf(browser, coverLetterHtml(resume.name, resume.contact, job.company, edit.output.coverNote), coverLetterPdf);
 

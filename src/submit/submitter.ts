@@ -86,6 +86,11 @@ export async function submitApplication(
       return { status: "needs_manual", reason: `Required fields not answerable from your facts: ${missingRequired.join("; ")}`, answers: log };
     }
     if (opts.dryRun) return { status: "ready", reason: "Dry run: form filled, not submitted", answers: log };
+    if (job.ats === "ashby") {
+      // Ashby's bot detection flagged an automated submission as spam in an earlier POC run.
+      // Filling is fine; the final click stays human so the application isn't silently binned.
+      return { status: "needs_manual", reason: "Ashby flags automated submits as spam: form is filled, open the link and click Submit yourself", answers: log };
+    }
 
     const { confirmed, evidence } = await submitAndConfirm(page);
     await page.screenshot({ path: opts.screenshotPath.replace(/\.png$/, "-after.png"), fullPage: true });
