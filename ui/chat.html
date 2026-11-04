@@ -162,7 +162,7 @@ async function ask(text) {
           const good = [...jobs.values()].filter((j) => (j.fit ?? 0) >= threshold && !j.applying);
           if (!good.length) return alert(`No cards scored ${threshold}+ yet.`);
           if (!confirm(`Apply to ${good.length} role(s) now?`)) return;
-          good.forEach((j) => apply(j.card, j.url, "submit"));
+          good.forEach((j) => apply(j.card, j.url, "submit", false));
           $("button", bulk).disabled = true;
         };
         bot.appendChild(bulk);
@@ -187,7 +187,7 @@ function jobCard(j) {
       <button data-a="dry" title="Fill the form and screenshot it without submitting">Dry run</button>
       <a class="ghost btn" href="${esc(j.url)}" target="_blank" rel="noopener">Posting ↗</a>
     </div>`;
-  el.querySelectorAll("button[data-a]").forEach((b) => (b.onclick = () => apply(el, j.url, b.dataset.a)));
+  el.querySelectorAll("button[data-a]").forEach((b) => (b.onclick = () => apply(el, j.url, b.dataset.a, true)));
   return el;
 }
 
@@ -196,17 +196,17 @@ function showFit(card, f) {
   pill.className = `fit ${f.score >= f.threshold ? "good" : "low"}`;
   pill.textContent = `Fit ${f.score}/10`;
   $(".why", card).innerHTML = esc(f.summary) + (f.gaps.length ? ` <i>Gaps: ${esc(f.gaps.join(", "))}</i>` : "") +
-    (f.score < f.threshold ? ` <b>Apply will skip this (below ${f.threshold}).</b>` : "");
+    (f.score < f.threshold ? ` <b>Below your ${f.threshold} threshold: “Apply to all” skips it, but you can still Apply here.</b>` : "");
 }
 
-function apply(card, url, mode) {
+function apply(card, url, mode, manual) {
   card.querySelectorAll("button[data-a]").forEach((b) => (b.disabled = true));
   let p = $(".progress", card);
   if (!p) { p = document.createElement("div"); card.appendChild(p); }
   p.className = "progress";
   p.innerHTML = `<span class="spin"></span><span>${mode === "dry" ? "Dry run queued" : "Applying…"}</span>`;
   const line = $("span:last-child", p);
-  post("/api/apply", { url, mode }).then(({ id }) => listen(id, (ev) => {
+  post("/api/apply", { url, mode, manual }).then(({ id }) => listen(id, (ev) => {
     if (ev.type === "status") line.textContent = pretty(ev.data);
     if (ev.type === "error") { p.className = "progress bad"; p.innerHTML = `✗ ${esc(ev.data)}`; card.querySelectorAll("button[data-a]").forEach((b) => (b.disabled = false)); }
     if (ev.type === "result") {

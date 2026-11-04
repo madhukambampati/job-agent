@@ -100,10 +100,14 @@ describe("chat → cards → Apply over HTTP", () => {
     const skipped = await events((await post("/api/apply", { url: low.url })).id);
     expect(skipped.at(-1).data.status).toBe("skipped");
 
+    // Clicking Apply on the card yourself overrides the fit threshold.
+    const manual = await events((await post("/api/apply", { url: low.url, manual: true })).id);
+    expect(manual.at(-1)).toMatchObject({ type: "result", data: { status: "applied", score: 6 } });
+
     // Ledger intent from chat, and the applied job no longer shows in a fresh search.
     const led = await events((await post("/api/chat", { message: "show my applications status" })).id);
     expect(led.at(-1).type).toBe("ledger");
-    expect(led.at(-1).data.map((r: any) => r.status).sort()).toEqual(["applied", "skipped"]);
+    expect(led.at(-1).data.map((r: any) => r.status).sort()).toEqual(["applied", "applied"]);
     const again = await events((await post("/api/chat", { message: "SDET remote Canada" })).id);
     expect(again.filter((e) => e.type === "job").map((e) => e.data.company)).not.toContain("Northwind");
   }, 120000);

@@ -105,7 +105,7 @@ export function createApp(deps: AppDeps): Server {
     })();
   }
 
-  function startApply(url: string, mode: "submit" | "dry", s: Stream) {
+  function startApply(url: string, mode: "submit" | "dry", s: Stream, userConfirmed = false) {
     emit(s, "status", "Queued");
     applyChain = applyChain.then(async () => {
       const browser = await deps.launch();
@@ -113,6 +113,7 @@ export function createApp(deps: AppDeps): Server {
         const { profile, resumeMarkdown } = deps.load();
         const r = await runJob(url, { llm: deps.llm(), profile, resumeMarkdown, ledger: ledger(), browser }, {
           dryRun: mode === "dry",
+          userConfirmed,
           fetcher: deps.fetcher,
           outRoot: deps.outRoot,
           log: (m) => emit(s, "status", m),
@@ -180,14 +181,14 @@ export function createApp(deps: AppDeps): Server {
         const url = String(b.url ?? "");
         if (!/^https?:\/\//.test(url)) return json(res, 400, { error: "Bad job URL" });
         const [id, s] = open();
-        startApply(url, b.mode === "dry" ? "dry" : "submit", s);
+        startApply(url, b.mode === "dry" ? "dry" : "submit", s, b.manual === true);
         return json(res, 200, { id });
       }
       // Dashboard's run box uses the same queue.
       if (POST && u.pathname === "/api/run") {
         const b = await body(req);
         const [id, s] = open();
-        startApply(String(b.url ?? ""), b.mode === "submit" ? "submit" : "dry", s);
+        startApply(String(b.url ?? ""), b.mode === "submit" ? "submit" : "dry", s, true);
         return json(res, 200, { id });
       }
 

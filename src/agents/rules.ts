@@ -5,8 +5,11 @@ import type { Job } from "../types.js";
  * Deterministic pre-screen that runs before any model call. These are the
  * user's hard rules, so they live in code, not in a prompt the model could
  * talk itself out of.
+ *
+ * `ignoreLocation`: the user explicitly chose this job (clicked Apply on its card),
+ * so their own remote/location preference no longer blocks it.
  */
-export function hardRuleViolations(job: Job, profile: Profile): string[] {
+export function hardRuleViolations(job: Job, profile: Profile, opts: { ignoreLocation?: boolean } = {}): string[] {
   const reasons: string[] = [];
   const haystack = `${job.title}\n${job.employmentType ?? ""}\n${job.location}`.toLowerCase();
   const descHead = job.description.slice(0, 1500).toLowerCase();
@@ -22,7 +25,7 @@ export function hardRuleViolations(job: Job, profile: Profile): string[] {
     if (job.title.toLowerCase().includes(k.toLowerCase())) reasons.push(`Title contains excluded keyword "${k}"`);
   }
 
-  if (profile.search.remoteOnly) {
+  if (profile.search.remoteOnly && !opts.ignoreLocation) {
     const loc = job.location.toLowerCase();
     const remote = /remote/.test(loc) || /\bfully remote\b|\bremote[- ]first\b/.test(descHead);
     const okPlace = profile.search.acceptableLocations.some((l) => loc.includes(l.toLowerCase()));

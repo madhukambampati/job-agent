@@ -51,6 +51,9 @@ describe("hard rules", () => {
     expect(hardRuleViolations(job({ location: "San Francisco, CA" }), profile)[0]).toMatch(/Not remote/);
     expect(hardRuleViolations(job({ compensation: "CAD 60,000 - 75,000" }), profile)[0]).toMatch(/below/);
     expect(hardRuleViolations(job(), profile)).toEqual([]);
+    // A card you chose yourself: your remote-only preference no longer blocks it, contract still does.
+    expect(hardRuleViolations(job({ location: "Toronto, ON | Hybrid" }), profile, { ignoreLocation: true })).toEqual([]);
+    expect(hardRuleViolations(job({ title: "SDET (Contract)", location: "Toronto" }), profile, { ignoreLocation: true })[0]).toMatch(/contract/);
   });
   it("reads salary strings", () => {
     expect(maxPostedSalary("$120k - $150k")).toBe(150000);

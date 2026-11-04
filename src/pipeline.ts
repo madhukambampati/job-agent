@@ -22,6 +22,13 @@ export interface RunOptions {
   dryRun?: boolean;
   /** Re-run even if the ledger says this job was already handled. */
   force?: boolean;
+  /**
+   * The user picked this exact job and clicked Apply. Their location/work-mode
+   * preference and the fit threshold stop being blockers (fit is still scored
+   * and recorded). Safety stops (captcha, unanswerable required questions,
+   * Ashby, duplicates, daily cap) still apply.
+   */
+  userConfirmed?: boolean;
   outRoot?: string;
   fetcher?: Fetcher;
   log?: (msg: string) => void;
@@ -57,7 +64,7 @@ export async function runJob(
   }
 
   // ---- 1. The filter: hard rules in code, then the model --------------------
-  const violations = hardRuleViolations(job, profile);
+  const violations = hardRuleViolations(job, profile, { ignoreLocation: opts.userConfirmed });
   if (violations.length) {
     ledger.upsert({ ...base, status: "skipped", score: null, notes: violations.join("; "), nextStep: "" });
     return { job, status: "skipped", score: null, reason: violations.join("; "), outDir: null };
@@ -71,7 +78,7 @@ export async function runJob(
   writeFileSync(join(outDir, "fit.json"), JSON.stringify(fit, null, 2));
 
   const threshold = profile.automation.scoreThreshold;
-  if (fit.score < threshold) {
+  if (fit.score < threshold && !opts.userConfirmed) {
     const reason = `Fit ${fit.score}/10 < ${threshold}. Gaps: ${fit.gaps.map((g) => g.requirement).join("; ")}`;
     ledger.upsert({ ...base, status: "skipped", score: fit.score, notes: reason, outDir, nextStep: "" });
     writeFileSync(join(outDir, "report.md"), report(job, fit.score, "skipped", reason, null, []));
