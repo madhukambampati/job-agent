@@ -174,3 +174,51 @@ describe("QA report regressions (Nov 4)", () => {
     }
   });
 });
+
+describe("QA report regressions, round 2", () => {
+  it("#1 Toronto hybrid search drops Remote-US, Sunnyvale and Ottawa", () => {
+    const t: SearchQuery = { ...q, places: ["Toronto"], workplace: "hybrid" };
+    expect(placeMatches("Remote, US", "", t).ok).toBe(false);
+    expect(placeMatches("Sunnyvale, CA · Hybrid", "", t)).toMatchObject({ ok: false, reason: "in another country" });
+    expect(placeMatches("Ottawa, ON · Hybrid", "", t)).toMatchObject({ ok: false, reason: "different city" });
+    expect(placeMatches("Toronto, ON · Hybrid", "", t).ok).toBe(true);
+  });
+
+  it("#3 a stale search hit still leads to the company's live roles, closed vs unreachable is reported, every URL is logged", async () => {
+    const { FakeLLM } = await import("./helpers.js");
+    const { readFileSync } = await import("node:fs");
+    const evalQ: SearchQuery = { intent: "search", titles: ["Evals", "AI Evaluation", "QA Engineer"], country: "Canada", places: [], workplace: "remote", exclude: [] };
+    const llm = new FakeLLM({}, () => "https://jobs.lever.co/evalco/old-closed\nhttps://jobs.lever.co/downco/x1");
+    const live = { id: "new-1", text: "Member of Technical Staff, Evals", hostedUrl: "https://jobs.lever.co/evalco/new-1", categories: { location: "Remote - Canada", commitment: "Full-time" }, workplaceType: "remote", descriptionPlain: "Build evals.", lists: [] };
+    const fetcher = async (u: string) => {
+      const r = (status: number, body: unknown) => ({ ok: status < 400, status, json: async () => body, text: async () => "" });
+      if (u.includes("/postings/evalco?mode=json")) return r(200, [live]);
+      if (u.includes("/postings/evalco/new-1")) return r(200, live);
+      if (u.includes("/postings/evalco/old-closed")) return r(404, {});
+      if (u.includes("downco")) return r(503, {});
+      return r(404, {});
+    };
+    const dir = mkdtempSync(join(tmpdir(), "s3-"));
+    const status: string[] = [];
+    const jobs = await searchJobs(llm, evalQ, { profile, fetcher, boards: new BoardMemory(join(dir, "boards.json")) }, { status: (m) => status.push(m), job: () => {} });
+    expect(jobs.map((j) => j.title)).toEqual(["Member of Technical Staff, Evals"]);
+    expect(status.at(-1)).toMatch(/1 matching role \(left out: .*1 closed.*1 unreachable|1 unreachable.*1 closed/);
+    const logged = JSON.parse(readFileSync(join(dir, "last-search.json"), "utf8")).results.map((r: any) => r.outcome).sort();
+    expect(logged).toEqual(["closed", "shown", "unreachable"]);
+  });
+
+  it("#2 retry endpoint re-scores a single card", async () => {
+    const form = await startFormServer({ "/apply": FORM_HAPPY });
+    const { llm, fetcher } = fakeMarket(`${form.url}/apply`);
+    const dir = mkdtempSync(join(tmpdir(), "rf-"));
+    const app = createApp({ llm: () => llm, load: () => ({ profile, resumeMarkdown: RESUME_MD }), launch: launchBrowser, fetcher, ledgerPath: join(dir, "l.json"), boards: new BoardMemory(join(dir, "b.json")) });
+    await new Promise<void>((r) => app.listen(0, "127.0.0.1", r));
+    try {
+      const res = await fetch(`http://127.0.0.1:${(app.address() as AddressInfo).port}/api/fit`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ url: "https://jobs.lever.co/northwind/nw-1" }) });
+      expect(await res.json()).toMatchObject({ score: 8, threshold: 7 });
+    } finally {
+      app.close();
+      form.server.close();
+    }
+  });
+});

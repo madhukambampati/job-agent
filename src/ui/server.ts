@@ -7,7 +7,7 @@ import { scoreFit } from "../agents/filter.js";
 import { Ledger } from "../agents/ledger.js";
 import { gradeAnswer } from "../agents/sparring.js";
 import { launchBrowser } from "../browser.js";
-import type { Fetcher } from "../jobs/fetch.js";
+import { fetchJob, type Fetcher } from "../jobs/fetch.js";
 import { AnthropicLLM, type LLM } from "../llm.js";
 import { runJob } from "../pipeline.js";
 import { loadProfile, type Profile } from "../profile.js";
@@ -200,6 +200,15 @@ export function createApp(deps: AppDeps): Server {
         const [id, s] = open();
         startSearch(String(message), s);
         return json(res, 200, { id });
+      }
+
+      // Re-score one card after a fit check failed or timed out.
+      if (POST && u.pathname === "/api/fit") {
+        const b = await body(req);
+        const { profile, resumeMarkdown } = deps.load();
+        const job = await fetchJob(String(b.url ?? ""), deps.fetcher);
+        const f = await withTimeout(scoreFit(deps.llm(), job, resumeForPrompt(parseResume(resumeMarkdown))), deps.fitTimeoutMs ?? 90_000);
+        return json(res, 200, { id: job.id, score: f.score, summary: f.summary, gaps: f.gaps.slice(0, 3).map((g) => g.requirement), threshold: profile.automation.scoreThreshold });
       }
 
       if (POST && u.pathname === "/api/apply") {

@@ -1,8 +1,8 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname } from "node:path";
+import { dirname, join } from "node:path";
 import { z } from "zod";
 import { maxPostedSalary } from "./agents/rules.js";
-import { fetchJob, parseJobUrl, type Fetcher } from "./jobs/fetch.js";
+import { fetchJob, parseJobUrl, PostingClosedError, type Fetcher } from "./jobs/fetch.js";
 import type { LLM } from "./llm.js";
 import type { Profile } from "./profile.js";
 import type { Job } from "./types.js";
@@ -28,6 +28,9 @@ const PARSE_SYSTEM = `You turn a job seeker's chat message into a structured job
 - titles: the roles they want plus the common synonyms recruiters use. For "SDET QA" include e.g.
   "SDET", "Software Development Engineer in Test", "Software Engineer in Test", "QA Automation", "QA Engineer",
   "Quality Assurance", "Quality Engineer", "Test Automation", "Automation Engineer". Keep each short (1-5 words).
+  For AI / LLM evaluation or quality work include e.g. "Evals", "Evaluation", "AI Quality", "LLM Quality",
+  "Model Evaluation", "AI Evaluation", "AI Test", "Red Team", "AI Safety", "Trust and Safety", plus the QA titles above,
+  because these roles are often titled "Member of Technical Staff, Evals" or "Software Engineer, Model Evaluation".
 - country: English country name if they named one (or implied via a city), else "".
 - places: cities/provinces/states they named.
 - workplace: remote / hybrid / onsite if they said so, else "any".
@@ -63,6 +66,10 @@ export class BoardMemory {
   }
   list(): string[] {
     return [...this.boards];
+  }
+  /** Folder the memory lives in; the last search's per-URL log goes next to it. */
+  dir(): string {
+    return dirname(this.path);
   }
   add(ats: string, board: string): void {
     const key = `${ats}:${board}`;
@@ -226,32 +233,45 @@ export async function searchJobs(
   const seen = new Set<string>();
   const found: Job[] = [];
   const skipped: Record<string, number> = {};
-  const note = (r: string) => (skipped[r] = (skipped[r] ?? 0) + 1);
+  const log: { url: string; outcome: string; title?: string; location?: string }[] = [];
+  // One outcome per URL, from the same checks that decide what's shown, so the summary can't disagree with the cards.
+  const note = (url: string, r: string, job?: Job) => {
+    skipped[r] = (skipped[r] ?? 0) + 1;
+    log.push({ url, outcome: r, title: job?.title, location: job?.location });
+  };
 
-  // a) remembered boards, filtered by title + location before any detail fetch
-  const remembered = boards.list();
-  const candidates: string[] = [];
-  if (remembered.length) {
-    on.status(`Checking ${remembered.length} company boards I've seen before…`);
-    const lists = await pool(remembered.slice(0, 60), 8, (b) => listBoard(b, fetcher).catch(() => [] as Candidate[]));
-    for (const c of lists.flat()) {
-      if (!titleMatches(c.title, q)) continue;
-      // Board listings only carry a short location; let vague "Remote" through to the detail check.
-      const quick = placeMatches(c.location, "", q, c.title);
-      if (!quick.ok && !/^\s*(remote)?\s*$/i.test(c.location) && !/remote/i.test(c.location)) continue;
-      candidates.push(c.url);
-    }
-  }
-
-  // b) live web search on the ATS domains
+  // a) live web search on the ATS domains: gives URLs, and more importantly, which companies are hiring for this
   on.status("Searching Greenhouse, Lever and Ashby job boards…");
+  let discovered: string[] = [];
   try {
-    candidates.push(...(await discoverUrls(llm, q)));
+    discovered = await discoverUrls(llm, q);
   } catch (e) {
     on.status(`Web search failed (${(e as Error).message}); using remembered boards only.`);
   }
 
-  const unique = [...new Set(candidates)];
+  // b) list every board we know about, old and newly found. Search results are often stale; the board itself is live.
+  const fromSearch = discovered.map((u) => parseJobUrl(u)).map((p) => `${p.ats}:${p.board}`);
+  const allBoards = [...new Set([...fromSearch, ...boards.list()])].slice(0, 80);
+  on.status(`Checking current openings on ${allBoards.length} company boards…`);
+  const listed = await pool(allBoards, 8, async (b) => {
+    try {
+      const jobs = await listBoard(b, fetcher);
+      const [ats, board] = b.split(":");
+      if (jobs.length) boards.add(ats, board);
+      return jobs;
+    } catch {
+      return [] as Candidate[];
+    }
+  });
+  const candidates = new Set<string>(discovered);
+  for (const c of listed.flat()) {
+    if (!titleMatches(c.title, q)) continue;
+    // Board listings only carry a short location; a "Remote"-ish one goes on to the full check.
+    const quick = placeMatches(c.location, "", q, c.title);
+    if (quick.ok || /remote/i.test(c.location) || !c.location.trim()) candidates.add(c.url);
+  }
+
+  const unique = [...candidates];
   on.status(`Found ${unique.length} possible postings, checking each one…`);
 
   await pool(unique, 6, async (url) => {
@@ -259,24 +279,31 @@ export async function searchJobs(
     let job: Job;
     try {
       job = await fetchJob(url, fetcher);
-    } catch {
-      return note("closed or unreachable");
+    } catch (e) {
+      return note(url, e instanceof PostingClosedError ? "closed" : "unreachable");
     }
     if (seen.has(job.id)) return;
     seen.add(job.id);
     const p = parseJobUrl(url);
     boards.add(p.ats, p.board);
-    if (deps.isKnown?.(job.id)) return note("already applied");
-    if (!titleMatches(job.title, q)) return note("different role");
+    if (deps.isKnown?.(job.id)) return note(url, "already applied", job);
+    if (!titleMatches(job.title, q)) return note(url, "different role", job);
     const place = placeMatches(`${job.location} ${job.employmentType ?? ""}`, job.description.slice(0, 2500), q, job.title);
-    if (!place.ok) return note(place.reason);
+    if (!place.ok) return note(url, place.reason, job);
     const emp = employmentOk(job, deps.profile);
-    if (emp) return note(emp);
+    if (emp) return note(url, emp, job);
     if (found.length >= limit) return;
     found.push(job);
+    log.push({ url, outcome: "shown", title: job.title, location: job.location });
     on.job(job);
   });
 
+  try {
+    mkdirSync(boards.dir(), { recursive: true });
+    writeFileSync(join(boards.dir(), "last-search.json"), JSON.stringify({ at: new Date().toISOString(), query: q, results: log }, null, 2) + "\n");
+  } catch {
+    /* log is best-effort */
+  }
   const why = Object.entries(skipped).map(([k, v]) => `${v} ${k}`).join(", ");
   on.status(`${found.length} matching role${found.length === 1 ? "" : "s"}${why ? ` (left out: ${why})` : ""}.`);
   return found;

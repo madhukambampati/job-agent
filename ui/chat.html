@@ -175,13 +175,13 @@ async function ask(text) {
       else if (ev.type === "error") { $(".status", bot).innerHTML = `<span style="color:var(--red)">Something went wrong: ${esc(ev.data)}</span>`; }
       else if (ev.type === "end") {
         $(".status .spin", bot)?.remove();
-        for (const j of jobs.values()) if (j.fit === undefined && $(".fit .spin", j.card)) fitFailed(j.card, "no answer");
+        for (const j of jobs.values()) if (j.card.fit === undefined && $(".fit .spin", j.card)) fitFailed(j.card, "no answer");
         if (!jobs.size) { statusEl.textContent += " Try widening it: drop the city, or add another title."; return; }
         const bulk = document.createElement("div");
         bulk.className = "bulk";
         bulk.innerHTML = `<button class="primary">Apply to all with fit ≥ ${threshold}</button><span class="status">Each one runs the full pipeline; low-fit roles are skipped automatically.</span>`;
         $("button", bulk).onclick = () => {
-          const good = [...jobs.values()].filter((j) => (j.fit ?? 0) >= threshold && !j.applying);
+          const good = [...jobs.values()].filter((j) => (j.card.fit ?? 0) >= threshold && !j.card.applying);
           if (!good.length) return alert(`No cards scored ${threshold}+ yet.`);
           if (!confirm(`Apply to ${good.length} role(s) now?`)) return;
           good.forEach((j) => apply(j.card, j.url, "submit", false));
@@ -199,6 +199,7 @@ async function ask(text) {
 function jobCard(j) {
   const el = document.createElement("div");
   el.className = "job";
+  el.dataset.url = j.url;
   el.innerHTML = `
     <div><h3>${esc(j.title)}</h3><div class="co">${esc(j.company)}</div>
       <div class="meta"><span>📍 ${esc(j.location || "—")}</span>${j.compensation ? `<span>💰 ${esc(j.compensation)}</span>` : ""}<span class="tag">${esc(j.ats)}</span></div></div>
@@ -216,11 +217,18 @@ function jobCard(j) {
 function enable(card) { if (!card.applying) card.querySelectorAll("button[data-a]").forEach((b) => { b.disabled = false; b.title = b.dataset.a === "dry" ? "Fill the form and screenshot it without submitting" : ""; }); }
 function fitFailed(card, why) {
   const pill = $(".fit", card);
-  pill.className = "fit na"; pill.textContent = "Fit not scored";
-  $(".why", card).innerHTML = `Couldn't score this one (${esc(why)}). Apply still scores it first and records the result.`;
+  pill.className = "fit na"; pill.textContent = "Fit check failed";
+  $(".why", card).innerHTML = `Couldn't score this one (${esc(why)}). <button type="button" class="ghost retry">Retry fit check</button> <br><b>Apply still works: it scores the role first and records the result.</b>`;
+  $(".retry", card).onclick = async (e) => {
+    e.target.disabled = true;
+    pill.innerHTML = '<span class="spin"></span>checking fit';
+    try { showFit(card, await post("/api/fit", { url: card.dataset.url })); }
+    catch (err) { fitFailed(card, err.message); }
+  };
   enable(card);
 }
 function showFit(card, f) {
+  card.fit = f.score;
   enable(card);
   const pill = $(".fit", card);
   pill.className = `fit ${f.score >= f.threshold ? "good" : "low"}`;

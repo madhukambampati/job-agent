@@ -68,12 +68,16 @@ function ashbyLocation(j: any): string {
   return [...new Set(places)].join(" / ") + [remote ? "Remote" : "", /hybrid/i.test(wt) ? "Hybrid" : "", /onsite|on-site/i.test(wt) ? "On-site" : ""].filter(Boolean).map((x) => ` · ${x}`).join("");
 }
 
+/** A posting the ATS says no longer exists (404/410, or missing from its board). */
+export class PostingClosedError extends Error {}
+
 export async function fetchJob(url: string, fetcher: Fetcher = fetch as unknown as Fetcher): Promise<Job> {
   const p = parseJobUrl(url);
   const get = async (apiUrl: string) => {
     const res = await fetcher(apiUrl).catch((e: Error) => {
       throw new Error(`Could not reach ${new URL(apiUrl).host} (${e.message}). Check your network.`);
     });
+    if (res.status === 404 || res.status === 410) throw new PostingClosedError(`Posting not found (${res.status})`);
     if (!res.ok) throw new Error(`Job fetch failed (${res.status}) for ${apiUrl}`);
     return res.json();
   };
@@ -105,7 +109,10 @@ export async function fetchJob(url: string, fetcher: Fetcher = fetch as unknown 
   }
 
   if (p.ats === "lever") {
-    const d = await get(`https://api.lever.co/v0/postings/${p.board}/${p.jobId}`);
+    // EU-hosted Lever accounts answer on api.eu.lever.co.
+    const d = await get(`https://api.lever.co/v0/postings/${p.board}/${p.jobId}`).catch((e) =>
+      e instanceof PostingClosedError ? get(`https://api.eu.lever.co/v0/postings/${p.board}/${p.jobId}`) : Promise.reject(e),
+    );
     const lists = (d.lists ?? []).map((l: any) => `${l.text}\n${htmlToText(l.content ?? "")}`).join("\n\n");
     const sr = d.salaryRange;
     return {
@@ -125,8 +132,8 @@ export async function fetchJob(url: string, fetcher: Fetcher = fetch as unknown 
 
   if (p.ats === "ashby") {
     const d = await get(`https://api.ashbyhq.com/posting-api/job-board/${p.board}?includeCompensation=true`);
-    const j = (d.jobs ?? []).find((x: any) => x.id === p.jobId);
-    if (!j) throw new Error(`Ashby job ${p.jobId} is not on ${p.board}'s public board (closed?)`);
+    const j = (d.jobs ?? []).find((x: any) => String(x.id).toLowerCase() === p.jobId.toLowerCase());
+    if (!j) throw new PostingClosedError(`Ashby job ${p.jobId} is no longer on ${p.board}'s board`);
     return {
       id: `ashby:${p.board}:${p.jobId}`,
       ats: "ashby",
