@@ -21,6 +21,8 @@ export interface RunOptions {
   noSubmit?: boolean;
   /** Fill the form and screenshot it, but don't click submit. */
   dryRun?: boolean;
+  /** Called once the posting is known (company/title for live progress). */
+  onJob?: (job: Job) => void;
   /** Re-run even if the ledger says this job was already handled. */
   force?: boolean;
   /**
@@ -56,8 +58,9 @@ export async function runJob(
   const resume = parseResume(deps.resumeMarkdown);
   const resumeText = resumeForPrompt(resume);
 
-  log("fetching posting");
+  log("Reading the posting");
   const job = await fetchJob(url, opts.fetcher);
+  opts.onJob?.(job);
   const base = { key: job.id, company: job.company, title: job.title, url: job.url };
 
   if (!opts.force && ledger.alreadyApplied(job.id)) {
@@ -71,7 +74,7 @@ export async function runJob(
     return { job, status: "skipped", score: null, reason: violations.join("; "), outDir: null };
   }
 
-  log("filter: scoring fit");
+  log("Scoring fit against your resume");
   const fit = await scoreFit(llm, job, resumeText);
   const outDir = resolve(opts.outRoot ?? "out", `${localDay()}-${slug(job.company)}-${slug(job.title)}`);
   mkdirSync(outDir, { recursive: true });
@@ -87,7 +90,7 @@ export async function runJob(
   }
 
   // ---- 2-4. Briefing, editor, sparring run independently -------------------
-  log(`fit ${fit.score}/10: briefing + editor + sparring in parallel`);
+  log(`Fit ${fit.score}/10. Tailoring résumé, writing cover note, briefing and interview questions`);
   const gaps = fit.gaps.map((g) => `${g.requirement} (${g.severity})`);
   const [briefing, edit, questions] = await Promise.all([
     writeBriefing(llm, job).catch((e: Error) => ({ markdown: `# Briefing failed\n\n${e.message}\n`, sources: [] })),
@@ -100,6 +103,7 @@ export async function runJob(
   writeFileSync(join(outDir, "cover-note.md"), edit.output.coverNote + "\n");
   writeFileSync(join(outDir, "edit.json"), JSON.stringify(edit, null, 2));
 
+  log("Rendering tailored résumé and cover letter PDFs");
   const roles = applyEdits(resume, edit.output);
   // Recruiters see the uploaded file name, so it reads like a person sent it.
   const fileStem = fullName(profile).replace(/[^A-Za-z0-9]+/g, "_").replace(/^_|_$/g, "");
@@ -118,11 +122,12 @@ export async function runJob(
   else if (!profile.automation.autoSubmit && !opts.dryRun) reason = "autoSubmit is off in profile; documents ready for you";
   else if (capHit && !opts.dryRun) reason = `Daily cap of ${profile.automation.dailyCap} reached`;
   else {
-    log(opts.dryRun ? "submitter: filling form (dry run)" : "submitter: applying");
+    log(opts.dryRun ? "Opening the application form (dry run)" : "Opening the application form");
     outcome = await submitApplication(browser, llm, job, profile, { resumePdf, coverLetterPdf, coverNote: edit.output.coverNote }, {
       dryRun: !!opts.dryRun,
       screenshotPath: join(outDir, "form.png"),
       facts: resumeText,
+      log,
     });
     status = outcome.status;
     reason = "evidence" in outcome ? `Confirmed: ${outcome.evidence}` : outcome.reason;

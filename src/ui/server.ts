@@ -13,7 +13,8 @@ import { runJob } from "../pipeline.js";
 import { loadProfile, type Profile } from "../profile.js";
 import { parseResume, resumeForPrompt } from "../resume.js";
 import { BoardMemory, parseRequest, searchJobs } from "../search.js";
-import { JobSchema, LedgerStatusSchema } from "../types.js";
+import { JobSchema, LedgerStatusSchema, type FitScore } from "../types.js";
+import { applyEdits } from "../agents/editor.js";
 
 /**
  * Local-only web UI. Everything still runs on this machine (agents, browser,
@@ -36,6 +37,21 @@ export interface AppDeps {
   fitTimeoutMs?: number;
   /** Set in sandbox mode: dummy jobs, local employer forms. */
   sandbox?: { inboxUrl: string; mode: string };
+}
+
+interface Active {
+  id: string;
+  url: string;
+  mode: "submit" | "dry";
+  step: string;
+  startedAt: string;
+  key?: string;
+  company?: string;
+  title?: string;
+}
+
+function fitPayload(id: string, f: FitScore, threshold: number) {
+  return { id, score: f.score, summary: f.summary, strengths: f.strengths.slice(0, 4), gaps: f.gaps.map((g) => ({ requirement: g.requirement, severity: g.severity })), plan: f.closeTheGap, threshold };
 }
 
 function limiter(n: number) {
@@ -120,7 +136,7 @@ export function createApp(deps: AppDeps): Server {
             emit(s, "job", { id: job.id, url: job.url, title: job.title, company: job.company, location: job.location, compensation: job.compensation, ats: job.ats });
             fits.push(
               limit(() => withTimeout(scoreFit(llm, job, resumeText), deps.fitTimeoutMs ?? 90_000))
-                .then((f) => emit(s, "fit", { id: job.id, score: f.score, summary: f.summary, gaps: f.gaps.slice(0, 3).map((g) => g.requirement), threshold }))
+                .then((f) => emit(s, "fit", fitPayload(job.id, f, threshold)))
                 .catch((e: Error) => emit(s, "fit_error", { id: job.id, error: e.message })),
             );
           },
@@ -133,17 +149,35 @@ export function createApp(deps: AppDeps): Server {
     })();
   }
 
+  /** Applications queued or running right now, so every view can show live progress. */
+  const active = new Map<string, Active>();
+
   function startApply(url: string, mode: "submit" | "dry", s: Stream, userConfirmed = false) {
-    emit(s, "status", "Queued");
+    const a: Active = { id: `${Date.now().toString(36)}${(seq++).toString(36)}`, url, mode, step: "Queued", startedAt: new Date().toISOString() };
+    active.set(a.id, a);
+    const step = (m: string) => {
+      a.step = m;
+      emit(s, "status", m);
+    };
+    step("Queued");
     applyChain = applyChain.then(async () => {
+      try {
+        await runOne();
+      } finally {
+        active.delete(a.id);
+      }
+    });
+    const runOne = async () => {
       // A browser that won't start fails this one application, not the whole server.
       let browser: Browser;
       try {
         browser = await deps.launch();
       } catch (e) {
+        active.delete(a.id);
         emit(s, "error", `Couldn't start the browser: ${(e as Error).message.split("\n")[0]}. Run: npx playwright install chromium`, true);
         return;
       }
+      a.step = "Starting";
       try {
         const { profile, resumeMarkdown } = deps.load();
         const r = await runJob(url, { llm: deps.llm(), profile, resumeMarkdown, ledger: ledger(), browser }, {
@@ -151,15 +185,46 @@ export function createApp(deps: AppDeps): Server {
           userConfirmed,
           fetcher: deps.fetcher,
           outRoot: deps.outRoot,
-          log: (m) => emit(s, "status", m),
+          log: step,
+          onJob: (job) => {
+            a.key = job.id;
+            a.company = job.company;
+            a.title = job.title;
+          },
         });
+        active.delete(a.id); // before the final event, so nobody sees a finished application as still running
         emit(s, "result", { key: r.job.id, company: r.job.company, title: r.job.title, status: r.status, score: r.score, reason: r.reason, applyUrl: r.job.applyUrl }, true);
       } catch (e) {
+        active.delete(a.id);
         emit(s, "error", (e as Error).message, true);
       } finally {
         await browser.close().catch(() => {});
       }
-    });
+    };
+  }
+
+  /** Ledger rows plus what each one needs on the dashboard (documents, honesty count, where to finish by hand). */
+  function applications() {
+    return {
+      rows: ledger().all().map((r) => {
+        const d = r.outDir ?? "";
+        const fs = files(r.outDir);
+        const job = d ? readJson(d, "job.json") : null;
+        const edit = d ? readJson(d, "edit.json") : null;
+        const fit = d ? readJson(d, "fit.json") : null;
+        return {
+          ...r,
+          applyUrl: job?.applyUrl ?? r.url,
+          location: job?.location ?? "",
+          resumePdf: fs.find((f) => /_Resume\.pdf$/.test(f)) ?? null,
+          coverPdf: fs.find((f) => /_Cover_Letter\.pdf$/.test(f)) ?? null,
+          claimsRemoved: edit?.rejected?.length ?? 0,
+          unsupported: edit?.output?.unsupportedRequirements?.length ?? 0,
+          gaps: (fit?.gaps ?? []).length,
+        };
+      }),
+      active: [...active.values()],
+    };
   }
 
   const json = (res: ServerResponse, status: number, body: unknown) => {
@@ -186,8 +251,43 @@ export function createApp(deps: AppDeps): Server {
       const parts = u.pathname.split("/").filter(Boolean).map(decodeURIComponent);
       const GET = req.method === "GET", POST = req.method === "POST";
 
-      if (GET && u.pathname === "/") return raw(res, readFileSync(join(ROOT, "ui", "chat.html")), "text/html; charset=utf-8");
-      if (GET && u.pathname === "/dashboard") return raw(res, readFileSync(join(ROOT, "ui", "dashboard.html")), "text/html; charset=utf-8");
+      if (GET && u.pathname === "/") return raw(res, readFileSync(join(ROOT, "ui", "app.html")), "text/html; charset=utf-8");
+      if (GET && u.pathname === "/dashboard") {
+        res.writeHead(302, { location: `/#applications` });
+        return res.end();
+      }
+
+      if (GET && u.pathname === "/api/applications") return json(res, 200, applications());
+
+      if (GET && u.pathname === "/api/profile") {
+        const { profile, resumeMarkdown } = deps.load();
+        const r = parseResume(resumeMarkdown);
+        return json(res, 200, {
+          profile,
+          resume: { name: r.name, contact: r.contact, summary: r.summary, skills: r.skills, roles: r.roles.map((x) => ({ heading: x.heading, bullets: x.bullets.length })), other: r.otherSections.map((x) => x.heading) },
+        });
+      }
+
+      // Original vs tailored resume, bullet by bullet.
+      if (GET && parts[1] === "job" && parts[2] && parts[3] === "diff") {
+        const row = ledger().get(parts[2]);
+        const edit = row?.outDir ? readJson(row.outDir, "edit.json") : null;
+        if (!edit) return json(res, 404, { error: "No tailored resume for this role (it was skipped before tailoring)." });
+        const resume = parseResume(deps.load().resumeMarkdown);
+        const tailored = applyEdits(resume, edit.output);
+        return json(res, 200, {
+          summary: { before: resume.summary, after: edit.output.summary },
+          roles: resume.roles.map((orig, i) => ({
+            heading: orig.heading,
+            bullets: tailored[i].bullets.map((b, pos) => {
+              const was = orig.bullets.findIndex((x) => x.id === b.id);
+              return { id: b.id, text: b.text, original: orig.bullets[was].text, from: was, to: pos, rewritten: b.text !== orig.bullets[was].text };
+            }),
+          })),
+          rejected: edit.rejected ?? [],
+          unsupported: edit.output.unsupportedRequirements ?? [],
+        });
+      }
 
       if (GET && u.pathname === "/api/config") {
         let name = "", threshold = 7, autoSubmit = true, dailyCap = 15, problem = "";
@@ -217,7 +317,7 @@ export function createApp(deps: AppDeps): Server {
         const { profile, resumeMarkdown } = deps.load();
         const job = await fetchJob(String(b.url ?? ""), deps.fetcher);
         const f = await withTimeout(scoreFit(deps.llm(), job, resumeForPrompt(parseResume(resumeMarkdown))), deps.fitTimeoutMs ?? 90_000);
-        return json(res, 200, { id: job.id, score: f.score, summary: f.summary, gaps: f.gaps.slice(0, 3).map((g) => g.requirement), threshold: profile.automation.scoreThreshold });
+        return json(res, 200, fitPayload(job.id, f, profile.automation.scoreThreshold));
       }
 
       if (POST && u.pathname === "/api/apply") {
@@ -253,7 +353,7 @@ export function createApp(deps: AppDeps): Server {
         return json(res, 200, ledger().setStatus(parts[2], LedgerStatusSchema.parse(b.status), b.nextStep, b.nextStepDate || null));
       }
 
-      if (GET && parts[1] === "job" && parts[2]) {
+      if (GET && parts[1] === "job" && parts[2] && !parts[3]) {
         const row = ledger().get(parts[2]);
         if (!row) return json(res, 404, { error: "not in ledger" });
         const d = row.outDir ?? "";

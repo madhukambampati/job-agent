@@ -131,3 +131,51 @@ describe("server survives a browser that won't start", () => {
     }
   });
 });
+
+describe("dashboard API", () => {
+  it("applications carry documents, honesty counts and finish-by-hand links; diff and profile work; live steps show while applying", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "dash-"));
+    const employer = await startEmployer(dir);
+    const llm = new OfflineLLM();
+    // Make the editor try one claim the resume doesn't support, so the honesty report has something to show.
+    const editing = { research: llm.research.bind(llm), structured: async (req: any) => {
+      const out: any = await llm.structured(req);
+      if (req.toolName === "record_edit") out.roles[0].rewrites = [{ bulletId: "r1.b1", text: "Built a Playwright framework in Go covering 400 tests.", keywordsUsed: ["Go"] }];
+      return out;
+    } } as any;
+    const app = createApp({ llm: () => editing, load: () => ({ profile, resumeMarkdown: RESUME_MD }), launch: launchBrowser, fetcher: employer.fetcher, ledgerPath: join(dir, "l.json"), boards: new BoardMemory(join(dir, "b.json")), outRoot: join(dir, "out") });
+    await new Promise<void>((r) => app.listen(0, "127.0.0.1", r));
+    const b = `http://127.0.0.1:${(app.address() as AddressInfo).port}`;
+    const j = async (path: string, body?: unknown) => (await fetch(b + path, body ? { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) } : undefined)).json();
+    try {
+      const steps: string[] = [];
+      const { id } = await j("/api/apply", { url: "https://job-boards.greenhouse.io/maplewave/jobs/4100001", manual: true });
+      const sawActive = (await j("/api/applications")).active.length;
+      const evs = (await (await fetch(`${b}/api/stream/${id}/events`)).text()).split("\n\n").filter(Boolean).map((l) => JSON.parse(l.slice(6)));
+      for (const e of evs) if (e.type === "status") steps.push(e.data);
+      expect(sawActive).toBe(1);
+      expect(steps.join("|")).toMatch(/Queued.*Reading the posting.*Scoring fit.*Tailoring.*Rendering.*Opening the application form.*Filling field 1 of \d+.*Submitting/);
+
+      await j("/api/apply", { url: "https://jobs.lever.co/cedarloop/cl-qe-301", manual: true }).then(({ id }) => fetch(`${b}/api/stream/${id}/events`).then((r) => r.text()));
+      const { rows, active } = await j("/api/applications");
+      expect(active).toEqual([]);
+      const mw = rows.find((r: any) => r.company === "Maplewave");
+      expect(mw).toMatchObject({ status: "applied", resumePdf: "Alex_Rivera_Resume.pdf", coverPdf: "Alex_Rivera_Cover_Letter.pdf", claimsRemoved: 1 });
+      const cl = rows.find((r: any) => r.company === "Cedarloop");
+      expect(cl.status).toBe("needs_manual");
+      expect(cl.applyUrl).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/apply\/cl-qe-301$/);
+
+      const diff = await j(`/api/job/${encodeURIComponent(mw.key)}/diff`);
+      expect(diff.rejected[0].reason).toMatch(/Go/);
+      expect(diff.roles[0].bullets.map((x: any) => x.id).sort()).toEqual(diff.roles[0].bullets.map((x: any) => x.id).sort());
+      expect(diff.roles[0].bullets.every((x: any) => !x.rewritten)).toBe(true); // the Go rewrite never reached the resume
+
+      const prof = await j("/api/profile");
+      expect(prof.resume.roles.length).toBe(2);
+      expect((await fetch(b + "/dashboard", { redirect: "manual" })).headers.get("location")).toBe("/#applications");
+    } finally {
+      app.close();
+      await employer.close();
+    }
+  }, 120000);
+});

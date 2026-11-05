@@ -79,7 +79,7 @@ describe("chat → cards → Apply over HTTP", () => {
   const post = async (path: string, body: unknown) => (await fetch(base + path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) })).json();
 
   it("serves the chat page", async () => {
-    expect(await (await fetch(base + "/")).text()).toContain("What are you looking for?");
+    expect(await (await fetch(base + "/")).text()).toContain("Find roles");
   });
 
   it("turns a message into job cards with fit scores, then Apply submits the real form", async () => {

@@ -286,12 +286,13 @@ export async function searchJobs(
     seen.add(job.id);
     const p = parseJobUrl(url);
     boards.add(p.ats, p.board);
-    if (deps.isKnown?.(job.id)) return note(url, "already applied", job);
     if (!titleMatches(job.title, q)) return note(url, "different role", job);
     const place = placeMatches(`${job.location} ${job.employmentType ?? ""}`, job.description.slice(0, 2500), q, job.title);
     if (!place.ok) return note(url, place.reason, job);
     const emp = employmentOk(job, deps.profile);
     if (emp) return note(url, emp, job);
+    // Last, so the summary only counts roles you'd otherwise have been shown.
+    if (deps.isKnown?.(job.id)) return note(url, "already applied", job);
     if (found.length >= limit) return;
     found.push(job);
     log.push({ url, outcome: "shown", title: job.title, location: job.location });

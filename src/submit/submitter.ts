@@ -11,6 +11,8 @@ export interface SubmitOptions {
   screenshotPath: string;
   /** Extra facts the answerer may use (resume text, cover note). */
   facts: string;
+  /** Live progress messages. */
+  log?: (msg: string) => void;
 }
 
 export type SubmitOutcome =
@@ -58,6 +60,7 @@ export async function submitApplication(
     }
 
     const fields = await scanForm(page);
+    opts.log?.(`Answering ${fields.length} form fields`);
     if (fields.length < 3) {
       await page.screenshot({ path: opts.screenshotPath, fullPage: true });
       return { status: "failed", reason: `Only found ${fields.length} form fields; page layout not recognised`, answers: log };
@@ -66,7 +69,9 @@ export async function submitApplication(
     const answers = await answerAll(llm, fields, profile, docs, opts.facts);
     const missingRequired: string[] = [];
 
+    let n = 0;
     for (const f of fields) {
+      opts.log?.(`Filling field ${++n} of ${fields.length}`);
       const a = answers.get(f.id)!;
       let filled = false;
       if (a.value !== null) {
@@ -92,6 +97,7 @@ export async function submitApplication(
       return { status: "needs_manual", reason: "Ashby flags automated submits as spam: form is filled, open the link and click Submit yourself", answers: log };
     }
 
+    opts.log?.("Submitting and waiting for confirmation");
     const { confirmed, evidence } = await submitAndConfirm(page);
     await page.screenshot({ path: opts.screenshotPath.replace(/\.png$/, "-after.png"), fullPage: true });
     return confirmed

@@ -96,21 +96,21 @@ export function honestyProblem(
   opts: { checkNumbersAgainstCorpus?: boolean; allowNewProperNouns?: boolean } = {},
 ): string | null {
   for (const k of keywordsUsed) {
-    if (!corpus.includes(k.toLowerCase())) return `keyword "${k}" is not in the base resume`;
+    if (!hasWord(corpus, k)) return `keyword "${k}" is not in the base resume`;
   }
   // Numbers (metrics, years, team sizes) must already exist in the source bullet (or anywhere, for summaries/notes).
   const numberSource = opts.checkNumbersAgainstCorpus || !sourceText ? corpus : sourceText.toLowerCase() + " " + corpus;
   for (const n of text.match(/\d+(?:[.,]\d+)?\s*%?/g) ?? []) {
-    if (!numberSource.includes(n.trim().toLowerCase())) return `number "${n.trim()}" is not in the base resume`;
+    if (!hasWord(numberSource, n.trim())) return `number "${n.trim()}" is not in the base resume`;
   }
   // Tech-looking tokens (TypeScript, C#, Node.js, k8s, AWS...) must already appear in the resume.
   for (const tok of techTokens(text)) {
-    if (!corpus.includes(tok.toLowerCase())) return `term "${tok}" is not in the base resume`;
+    if (!hasWord(corpus, tok)) return `term "${tok}" is not in the base resume`;
   }
   // Plain capitalised names mid-sentence (Kubernetes, Jenkins, Terraform) must already appear too.
   if (!opts.allowNewProperNouns) {
     for (const tok of properNouns(text)) {
-      if (!corpus.includes(tok.toLowerCase())) return `term "${tok}" is not in the base resume`;
+      if (!hasWord(corpus, tok)) return `term "${tok}" is not in the base resume`;
     }
   }
   return null;
@@ -122,13 +122,27 @@ const ORDINARY_CAPS = new Set([
 ]);
 
 /** Capitalised words that don't start a sentence: almost always product, tool or company names. */
+/** Capitalised two-letter words that are just English, not names (Go, R and C# are names). */
+const SHORT_WORDS = new Set(["In", "At", "To", "Of", "On", "As", "By", "Or", "An", "If", "It", "Is", "We", "My", "So", "Up", "Do", "No", "Be", "He", "Me", "Us"]);
+
+/**
+ * Whole-word match. Substring matching let "Go" pass because the resume says
+ * "golden", and "Java" pass because it says "JavaScript".
+ */
+export function hasWord(corpus: string, term: string): boolean {
+  const t = term.toLowerCase().trim();
+  if (!t) return true;
+  const e = t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`(^|[^a-z0-9+#])${e}($|[^a-z0-9+#])`).test(corpus.toLowerCase());
+}
+
 export function properNouns(text: string): string[] {
   const out = new Set<string>();
   for (const sentence of text.split(/(?<=[.!?:;])\s+|\n+/)) {
     const words = sentence.split(/\s+/).slice(1);
     for (const w of words) {
       const tok = w.replace(/^[^A-Za-z]+|[^A-Za-z0-9#+.]+$|\.$/g, "");
-      if (/^[A-Z][a-z]{2,}/.test(tok) && !ORDINARY_CAPS.has(tok) && !COMMON_CAPS.has(tok)) out.add(tok);
+      if ((/^[A-Z][a-z]{2,}/.test(tok) || /^[A-Z][a-z]$/.test(tok)) && !ORDINARY_CAPS.has(tok) && !COMMON_CAPS.has(tok) && !SHORT_WORDS.has(tok)) out.add(tok);
     }
   }
   return [...out];

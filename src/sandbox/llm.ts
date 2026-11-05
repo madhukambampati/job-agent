@@ -68,6 +68,13 @@ export class OfflineLLM implements LLM {
             summary: `Offline estimate: matches ${have.length} of ${asked.length || 0} listed skills${gaps.length ? `; missing ${gaps.join(", ")}` : ""}. Run sandbox with your API key for a real assessment.`,
             strengths: have.slice(0, 4),
             gaps: gaps.map((g) => ({ requirement: g, severity: /managing|hiring|clearance/.test(g) ? "major" : "minor", note: "Not on the resume" })),
+            closeTheGap: gaps.filter((g) => !/clearance/.test(g)).map((g) => ({
+              gap: g,
+              kind: /managing|hiring|budget/.test(g) ? "surface-existing" : /go|bazel/.test(g) ? "build-proof" : "learn",
+              action: /managing|hiring|budget/.test(g)
+                ? "If you've mentored or led people, describe that concretely; if not, this role needs real people-management experience."
+                : /go|bazel/.test(g) ? `Build a small public repo that uses ${g} in a test harness.` : `Spend a weekend on the basics of ${g} and note it honestly as 'learning'.`,
+            })),
           };
         }
         case "record_edit": {

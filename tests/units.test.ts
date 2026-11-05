@@ -174,3 +174,22 @@ describe("answer rules don't misfire on long questions (found by the sandbox)", 
     expect(deterministicAnswer(f("Please upload your most recent resume or CV (PDF preferred, max 5MB)", "file"), profile, docs)?.value).toBe("/r.pdf");
   });
 });
+
+describe("honesty guard uses whole words (found by the sandbox)", async () => {
+  const { honestyProblem, hasWord } = await import("../src/agents/editor.js");
+  const corpus = "built an llm evaluation harness with a golden dataset in javascript, cut runs from 6 to 3 hours.";
+  it("'Go' is not hidden inside 'golden', 'Java' not inside 'JavaScript'", () => {
+    expect(hasWord(corpus, "Go")).toBe(false);
+    expect(hasWord(corpus, "Java")).toBe(false);
+    expect(hasWord(corpus, "JavaScript")).toBe(true);
+    expect(honestyProblem("Built the harness in Go.", "", corpus, [])).toMatch(/Go/);
+    expect(honestyProblem("Built it.", "", corpus, ["Java"])).toMatch(/Java/);
+  });
+  it("numbers must match whole: 60 is not inside 6", () => {
+    expect(honestyProblem("Cut runs from 60 to 3 hours.", "", corpus, [])).toMatch(/60/);
+    expect(honestyProblem("Cut runs from 6 to 3 hours.", "", corpus, [])).toBeNull();
+  });
+  it("ordinary two-letter words are not treated as tools", () => {
+    expect(honestyProblem("Built a harness. In practice it cut runs from 6 to 3 hours.", "", corpus, [])).toBeNull();
+  });
+});

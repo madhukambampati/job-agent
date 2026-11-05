@@ -40,6 +40,16 @@ export const FitScoreSchema = z.object({
       note: z.string(),
     }),
   ),
+  /** Concrete, honest steps that would raise this score (learn, build, or surface real experience). */
+  closeTheGap: z
+    .array(
+      z.object({
+        gap: z.string(),
+        action: z.string(),
+        kind: z.enum(["surface-existing", "learn", "build-proof"]),
+      }),
+    )
+    .default([]),
 });
 export type FitScore = z.infer<typeof FitScoreSchema>;
 

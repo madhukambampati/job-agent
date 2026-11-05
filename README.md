@@ -63,7 +63,12 @@ Type what you want, e.g. *"SDET or QA automation jobs, remote in Canada"*. The b
 4. shows a card per role with a fit score from the filter agent,
 5. **Apply** on a card runs the whole pipeline and submits; **Apply to all with fit ≥ 7** queues every good card.
 
-`/dashboard` has the ledger, per-job briefing, cover note, form answers, PDFs and the sparring drill.
+The app has four views:
+
+- **Find**: search box, live “8 found · 5 of 8 scored” progress, match cards with a fit ring, *Why this score* (strengths, gaps, and an honest **To reach 8** plan), Apply / Dry run, and Apply-to-all.
+- **Applications**: every role with its tailored résumé and cover letter, live status pills (Queued → Scoring fit → Tailoring résumé → Filling form 8/16 → Submitted), filter tabs (All, In flight, Needs you, Submitted, Failed, Skipped) and **Submit all ready**. Click a row for the drawer: Overview, **Honesty** (claims removed and why), **Résumé changes** (before/after, bullet by bullet), **Interview prep** (graded mock interview), Briefing, Cover note, and the exact Form answers with a screenshot.
+- **Needs you**: everything the agent stopped on instead of guessing, with Finish by hand, Retry and Mark as applied.
+- **Profile**: what the agent knows about you and the rules it follows.
 
 ### Sandbox (try everything on dummy jobs first)
 
