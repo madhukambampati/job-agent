@@ -110,7 +110,7 @@ describe("sandbox: dummy market end to end", () => {
 });
 
 describe("server survives a browser that won't start", () => {
-  it("reports the error on that application and keeps serving", async () => {
+  it("records the role as Failed with a plain reason and keeps serving", async () => {
     const dir = mkdtempSync(join(tmpdir(), "nb-"));
     const employer = await startEmployer(dir);
     const app = createApp({
@@ -121,9 +121,14 @@ describe("server survives a browser that won't start", () => {
     await new Promise<void>((r) => app.listen(0, "127.0.0.1", r));
     const b = `http://127.0.0.1:${(app.address() as AddressInfo).port}`;
     try {
-      const { id } = await (await fetch(b + "/api/apply", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ url: "https://jobs.lever.co/northpine/np-qa-201" }) })).json();
+      const { id } = await (await fetch(b + "/api/apply", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ url: "https://jobs.lever.co/northpine/np-qa-201", manual: true }) })).json();
       const last = (await (await fetch(`${b}/api/stream/${id}/events`)).text()).split("\n\n").filter(Boolean).map((l) => JSON.parse(l.slice(6))).at(-1);
-      expect(last).toMatchObject({ type: "error", data: expect.stringMatching(/Couldn't start the browser.*playwright install/) });
+      expect(last).toMatchObject({ type: "result", data: { status: "failed", reason: expect.stringMatching(/isn't installed.*npx playwright install chromium/) } });
+      expect(last.data.reason).not.toMatch(/Executable|\//); // no raw paths
+      const { rows } = await (await fetch(b + "/api/applications")).json();
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({ company: "Northpine", status: "failed", nextStep: "Retry, or apply by hand" });
+      expect(rows[0].score).not.toBeNull(); // the work done before the browser was needed is kept
       expect((await fetch(b + "/api/config")).status).toBe(200);
     } finally {
       app.close();
@@ -178,4 +183,54 @@ describe("dashboard API", () => {
       await employer.close();
     }
   }, 120000);
+});
+
+describe("tester's open items", () => {
+  async function boot(dir: string, prof = profile) {
+    const employer = await startEmployer(dir);
+    const app = createApp({ llm: () => new OfflineLLM(), load: () => ({ profile: prof, resumeMarkdown: RESUME_MD }), launch: launchBrowser, fetcher: employer.fetcher, ledgerPath: join(dir, "ledger.json"), boards: new BoardMemory(join(dir, "b.json")), outRoot: join(dir, "out") });
+    await new Promise<void>((r) => app.listen(0, "127.0.0.1", r));
+    const b = `http://127.0.0.1:${(app.address() as AddressInfo).port}`;
+    const apply = async (url: string, manual = true) => {
+      const { id } = await (await fetch(b + "/api/apply", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ url, manual }) })).json();
+      return (await (await fetch(`${b}/api/stream/${id}/events`)).text()).split("\n\n").filter(Boolean).map((l) => JSON.parse(l.slice(6))).at(-1);
+    };
+    const rows = async () => (await (await fetch(b + "/api/applications")).json()).rows;
+    return { employer, apply, rows, stop: async () => { app.close(); await employer.close(); } };
+  }
+
+  it("a hybrid Toronto role applies when you click Apply on it, even with remote-only in your profile", async () => {
+    const s = await boot(mkdtempSync(join(tmpdir(), "hy-")));
+    try {
+      expect(profile.search.remoteOnly).toBe(true);
+      expect((await s.apply("https://job-boards.greenhouse.io/harbourfin/jobs/4100005")).data.status).toBe("applied");
+    } finally { await s.stop(); }
+  }, 60000);
+
+  it("duplicate Apply is blocked and the ledger survives a restart", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "dup-"));
+    let s = await boot(dir);
+    try {
+      expect((await s.apply("https://job-boards.greenhouse.io/maplewave/jobs/4100001")).data.status).toBe("applied");
+      const again = await s.apply("https://job-boards.greenhouse.io/maplewave/jobs/4100001");
+      expect(again.data.reason).toMatch(/Already/);
+      expect(s.employer.submissions()).toHaveLength(1);
+    } finally { await s.stop(); }
+    s = await boot(dir); // fresh server, same data folder
+    try {
+      expect((await s.rows()).map((r: any) => [r.company, r.status])).toEqual([["Maplewave", "applied"]]);
+      expect(s.employer.submissions()).toHaveLength(1); // employer inbox persists too
+    } finally { await s.stop(); }
+  }, 90000);
+
+  it("the daily cap stops submitting and says so", async () => {
+    const capped = { ...profile, automation: { ...profile.automation, dailyCap: 1 } };
+    const s = await boot(mkdtempSync(join(tmpdir(), "cap-")), capped);
+    try {
+      expect((await s.apply("https://job-boards.greenhouse.io/maplewave/jobs/4100001")).data.status).toBe("applied");
+      const second = await s.apply("https://jobs.lever.co/northpine/np-qa-201");
+      expect(second.data).toMatchObject({ status: "ready", reason: "Daily cap of 1 reached" });
+      expect(s.employer.submissions()).toHaveLength(1);
+    } finally { await s.stop(); }
+  }, 90000);
 });

@@ -6,7 +6,7 @@ import type { Browser } from "playwright";
 import { scoreFit } from "../agents/filter.js";
 import { Ledger } from "../agents/ledger.js";
 import { gradeAnswer } from "../agents/sparring.js";
-import { launchBrowser } from "../browser.js";
+import { BROWSER_SETUP_HELP, BrowserSetupError, launchBrowser } from "../browser.js";
 import { fetchJob, type Fetcher } from "../jobs/fetch.js";
 import { AnthropicLLM, type LLM } from "../llm.js";
 import { runJob } from "../pipeline.js";
@@ -168,19 +168,16 @@ export function createApp(deps: AppDeps): Server {
       }
     });
     const runOne = async () => {
-      // A browser that won't start fails this one application, not the whole server.
-      let browser: Browser;
-      try {
-        browser = await deps.launch();
-      } catch (e) {
-        active.delete(a.id);
-        emit(s, "error", `Couldn't start the browser: ${(e as Error).message.split("\n")[0]}. Run: npx playwright install chromium`, true);
-        return;
-      }
       a.step = "Starting";
+      // The browser starts only when PDFs or the form need it; if it can't start, the
+      // pipeline records the role as Failed with a plain-language reason.
+      const launch = () =>
+        deps.launch().catch((e: Error) => {
+          throw e instanceof BrowserSetupError ? e : new BrowserSetupError(BROWSER_SETUP_HELP);
+        });
       try {
         const { profile, resumeMarkdown } = deps.load();
-        const r = await runJob(url, { llm: deps.llm(), profile, resumeMarkdown, ledger: ledger(), browser }, {
+        const r = await runJob(url, { llm: deps.llm(), profile, resumeMarkdown, ledger: ledger(), browser: launch }, {
           dryRun: mode === "dry",
           userConfirmed,
           fetcher: deps.fetcher,
@@ -195,10 +192,9 @@ export function createApp(deps: AppDeps): Server {
         active.delete(a.id); // before the final event, so nobody sees a finished application as still running
         emit(s, "result", { key: r.job.id, company: r.job.company, title: r.job.title, status: r.status, score: r.score, reason: r.reason, applyUrl: r.job.applyUrl }, true);
       } catch (e) {
+        // Only reached before the role is known (e.g. the posting couldn't be read).
         active.delete(a.id);
-        emit(s, "error", (e as Error).message, true);
-      } finally {
-        await browser.close().catch(() => {});
+        emit(s, "error", `Couldn't read this posting: ${(e as Error).message.split("\n")[0]}`, true);
       }
     };
   }

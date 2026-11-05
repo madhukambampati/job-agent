@@ -422,7 +422,7 @@ function apply(j, mode, manual) {
         const inbox = CFG.sandbox ? ` · <a href="${esc(CFG.sandbox.inboxUrl)}" target="_blank" rel="noopener">employer inbox ↗</a>` : "";
         const m = {
           applied: ["ok", `✓ Submitted. Fit ${r.score}/10. ${open}${inbox}`],
-          ready: ["warn", `Form filled (dry run), not submitted. ${open}`],
+          ready: ["warn", `${/^Dry run/.test(r.reason) ? "Form filled (dry run), not submitted." : `Not submitted: ${esc(r.reason)}.`} ${open}`],
           needs_manual: ["warn", `Needs you: ${esc(r.reason)} · <a href="${esc(r.applyUrl)}" target="_blank" rel="noopener">finish by hand ↗</a> · ${open}`],
           skipped: ["skip", `Skipped: ${esc(r.reason)}`],
           failed: ["bad", `✗ ${esc(r.reason)} · ${open}`],

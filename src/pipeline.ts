@@ -7,6 +7,7 @@ import { scoreFit } from "./agents/filter.js";
 import { Ledger } from "./agents/ledger.js";
 import { hardRuleViolations } from "./agents/rules.js";
 import { generateQuestions, questionsMarkdown } from "./agents/sparring.js";
+import { BrowserSetupError } from "./browser.js";
 import { addDays, localDay } from "./dates.js";
 import { fetchJob, type Fetcher } from "./jobs/fetch.js";
 import type { LLM } from "./llm.js";
@@ -50,11 +51,14 @@ const plusDays = (d: number) => addDays(d);
 
 export async function runJob(
   url: string,
-  deps: { llm: LLM; profile: Profile; resumeMarkdown: string; ledger: Ledger; browser: Browser },
+  /** `browser` may be a launcher: it's only started when PDFs or the form need it. */
+  deps: { llm: LLM; profile: Profile; resumeMarkdown: string; ledger: Ledger; browser: Browser | (() => Promise<Browser>) },
   opts: RunOptions = {},
 ): Promise<RunResult> {
   const log = opts.log ?? (() => {});
-  const { llm, profile, ledger, browser } = deps;
+  const { llm, profile, ledger } = deps;
+  let launched: Promise<Browser> | null = null;
+  const getBrowser = () => (launched ??= typeof deps.browser === "function" ? deps.browser() : Promise.resolve(deps.browser));
   const resume = parseResume(deps.resumeMarkdown);
   const resumeText = resumeForPrompt(resume);
 
@@ -62,6 +66,11 @@ export async function runJob(
   const job = await fetchJob(url, opts.fetcher);
   opts.onJob?.(job);
   const base = { key: job.id, company: job.company, title: job.title, url: job.url };
+  let fitScore: number | null = null;
+  let outDirSoFar: string | null = null;
+
+  // From here on the role is known, so any failure is recorded in the ledger instead of vanishing.
+  try {
 
   if (!opts.force && ledger.alreadyApplied(job.id)) {
     return { job, status: ledger.get(job.id)!.status, score: ledger.get(job.id)!.score, reason: "Already in ledger as applied; skipping", outDir: ledger.get(job.id)!.outDir };
@@ -76,8 +85,10 @@ export async function runJob(
 
   log("Scoring fit against your resume");
   const fit = await scoreFit(llm, job, resumeText);
+  fitScore = fit.score;
   const outDir = resolve(opts.outRoot ?? "out", `${localDay()}-${slug(job.company)}-${slug(job.title)}`);
   mkdirSync(outDir, { recursive: true });
+  outDirSoFar = outDir;
   writeFileSync(join(outDir, "job.json"), JSON.stringify(job, null, 2));
   writeFileSync(join(outDir, "fit.json"), JSON.stringify(fit, null, 2));
 
@@ -109,6 +120,7 @@ export async function runJob(
   const fileStem = fullName(profile).replace(/[^A-Za-z0-9]+/g, "_").replace(/^_|_$/g, "");
   const resumePdf = join(outDir, `${fileStem}_Resume.pdf`);
   const coverLetterPdf = join(outDir, `${fileStem}_Cover_Letter.pdf`);
+  const browser = await getBrowser();
   await htmlToPdf(browser, resumeHtml(resume, roles, edit.output.summary), resumePdf);
   await htmlToPdf(browser, coverLetterHtml(resume.name, resume.contact, job.company, edit.output.coverNote), coverLetterPdf);
 
@@ -154,6 +166,15 @@ export async function runJob(
 
   writeFileSync(join(outDir, "report.md"), report(job, fit.score, status, reason, outcome, edit.rejected.map((r) => `${r.where}: ${r.reason}`), edit.output.unsupportedRequirements));
   return { job, status, score: fit.score, reason, outDir };
+  } catch (e) {
+    const reason = e instanceof BrowserSetupError ? e.message : `Something went wrong: ${(e as Error).message.split("\n")[0]}`;
+    ledger.upsert({ ...base, status: "failed", score: fitScore, nextStep: "Retry, or apply by hand", nextStepDate: plusDays(0), notes: reason, outDir: outDirSoFar });
+    return { job, status: "failed", score: fitScore, reason, outDir: outDirSoFar };
+  } finally {
+    // Only close a browser this run started; a Browser passed in belongs to the caller.
+    const started = launched as Promise<Browser> | null;
+    if (started && typeof deps.browser === "function") await started.then((b) => b.close()).catch(() => {});
+  }
 }
 
 function report(job: Job, score: number | null, status: string, reason: string, outcome: SubmitOutcome | null, rejected: string[], unsupported: string[] = []): string {
