@@ -8,10 +8,12 @@ import { Ledger } from "../agents/ledger.js";
 import { gradeAnswer } from "../agents/sparring.js";
 import { BROWSER_SETUP_HELP, BrowserSetupError, launchBrowser } from "../browser.js";
 import { fetchJob, type Fetcher } from "../jobs/fetch.js";
-import { AnthropicLLM, type LLM } from "../llm.js";
+import type { LLM } from "../llm.js";
+import { createLLM } from "../providers.js";
 import { runJob } from "../pipeline.js";
 import { loadProfile, type Profile } from "../profile.js";
-import { parseResume, resumeForPrompt } from "../resume.js";
+import { parseResume, resumeForPrompt, type Resume } from "../resume.js";
+import { createRetriever, type EvidenceRetriever } from "../rag/index.js";
 import { BoardMemory, parseRequest, searchJobs } from "../search.js";
 import { JobSchema, LedgerStatusSchema, type FitScore } from "../types.js";
 import { applyEdits } from "../agents/editor.js";
@@ -35,6 +37,8 @@ export interface AppDeps {
   outRoot?: string;
   fitConcurrency?: number;
   fitTimeoutMs?: number;
+  /** Evidence retriever for RAG; defaults to createRetriever (Cohere if COHERE_API_KEY, else local). Return null to turn it off. */
+  retriever?: (resume: Resume) => EvidenceRetriever | null;
   /** Set in sandbox mode: dummy jobs, local employer forms. */
   sandbox?: { inboxUrl: string; mode: string };
 }
@@ -177,7 +181,8 @@ export function createApp(deps: AppDeps): Server {
         });
       try {
         const { profile, resumeMarkdown } = deps.load();
-        const r = await runJob(url, { llm: deps.llm(), profile, resumeMarkdown, ledger: ledger(), browser: launch }, {
+        const retriever = (deps.retriever ?? ((res: Resume) => createRetriever(res)))(parseResume(resumeMarkdown));
+        const r = await runJob(url, { llm: deps.llm(), profile, resumeMarkdown, ledger: ledger(), browser: launch, retriever }, {
           dryRun: mode === "dry",
           userConfirmed,
           fetcher: deps.fetcher,
@@ -356,7 +361,8 @@ export function createApp(deps: AppDeps): Server {
         return json(res, 200, {
           row, files: files(row.outDir),
           report: d && readText(d, "report.md"), briefing: d && readText(d, "briefing.md"), coverNote: d && readText(d, "cover-note.md"),
-          fit: d && readJson(d, "fit.json"), edit: d && readJson(d, "edit.json"), questions: d && readJson(d, "questions.json"), answers: d && readJson(d, "answers.json"),
+          fit: d && readJson(d, "fit.json"),
+          evidence: d && readJson(d, "evidence.json"), edit: d && readJson(d, "edit.json"), questions: d && readJson(d, "questions.json"), answers: d && readJson(d, "answers.json"),
         });
       }
 
@@ -391,7 +397,7 @@ export function startUi(port = Number(process.env.JOB_AGENT_UI_PORT ?? 3000), de
   }
   let llm: LLM | null = null;
   const app = createApp({
-    llm: () => (llm ??= new AnthropicLLM()),
+    llm: () => (llm ??= createLLM()),
     load: () => loadProfile(),
     launch: launchBrowser,
     ...deps,

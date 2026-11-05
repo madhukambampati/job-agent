@@ -12,7 +12,9 @@ import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { parse } from "yaml";
 import { join, resolve } from "node:path";
 import { launchBrowser } from "../browser.js";
-import { AnthropicLLM, type LLM } from "../llm.js";
+import type { LLM } from "../llm.js";
+import { createLLM } from "../providers.js";
+import { createRetriever } from "../rag/index.js";
 import { loadProfile, ProfileSchema } from "../profile.js";
 import { BoardMemory } from "../search.js";
 import { startUi } from "../ui/server.js";
@@ -39,9 +41,11 @@ const loaded = mine
 
 let llm: LLM;
 let mode: string;
-if (!args.has("--offline") && process.env.ANTHROPIC_API_KEY) {
-  llm = new SandboxLLM(new AnthropicLLM());
-  mode = "real Claude, fake web search";
+const provider = process.env.JOB_AGENT_PROVIDER ?? "anthropic";
+const haveKey = provider === "cohere" ? !!process.env.COHERE_API_KEY : !!process.env.ANTHROPIC_API_KEY;
+if (!args.has("--offline") && haveKey) {
+  llm = new SandboxLLM(createLLM(provider));
+  mode = `real ${provider === "cohere" ? "Cohere Command" : "Claude"}, fake web search, ${process.env.COHERE_API_KEY ? "Cohere Embed + Rerank" : "local"} evidence retrieval`;
 } else {
   llm = new OfflineLLM();
   mode = args.has("--offline") ? "offline (no API calls)" : "offline (no ANTHROPIC_API_KEY in .env)";
@@ -58,6 +62,8 @@ startUi(port, {
   boards: new BoardMemory(join(dir, "boards.json")),
   outRoot: join(dir, "out"),
   sandbox: { inboxUrl: `${employer.baseUrl}/inbox`, mode },
+  // --offline means no API calls at all, so evidence retrieval stays local even with a Cohere key.
+  retriever: (res) => createRetriever(res, args.has("--offline") ? { apiKey: "" } : {}),
 });
 
 console.log(`

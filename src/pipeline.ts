@@ -8,6 +8,7 @@ import { Ledger } from "./agents/ledger.js";
 import { hardRuleViolations } from "./agents/rules.js";
 import { generateQuestions, questionsMarkdown } from "./agents/sparring.js";
 import { BrowserSetupError } from "./browser.js";
+import { evidenceForPrompt, extractRequirements, type EvidenceMatch, type EvidenceRetriever } from "./rag/index.js";
 import { addDays, localDay } from "./dates.js";
 import { fetchJob, type Fetcher } from "./jobs/fetch.js";
 import type { LLM } from "./llm.js";
@@ -52,7 +53,7 @@ const plusDays = (d: number) => addDays(d);
 export async function runJob(
   url: string,
   /** `browser` may be a launcher: it's only started when PDFs or the form need it. */
-  deps: { llm: LLM; profile: Profile; resumeMarkdown: string; ledger: Ledger; browser: Browser | (() => Promise<Browser>) },
+  deps: { llm: LLM; profile: Profile; resumeMarkdown: string; ledger: Ledger; browser: Browser | (() => Promise<Browser>); retriever?: EvidenceRetriever | null },
   opts: RunOptions = {},
 ): Promise<RunResult> {
   const log = opts.log ?? (() => {});
@@ -83,14 +84,27 @@ export async function runJob(
     return { job, status: "skipped", score: null, reason: violations.join("; "), outDir: null };
   }
 
+  // ---- Evidence (RAG): which of your own bullets support each requirement ---------
+  let matches: EvidenceMatch[] | null = null;
+  if (deps.retriever) {
+    log("Finding evidence for each requirement");
+    try {
+      matches = await deps.retriever.match(extractRequirements(job.description));
+    } catch (e) {
+      log(`Evidence search unavailable (${(e as Error).message.split("\n")[0]}); continuing without it`);
+    }
+  }
+  const evidence = matches ? evidenceForPrompt(matches) : "";
+
   log("Scoring fit against your resume");
-  const fit = await scoreFit(llm, job, resumeText);
+  const fit = await scoreFit(llm, job, resumeText, evidence);
   fitScore = fit.score;
   const outDir = resolve(opts.outRoot ?? "out", `${localDay()}-${slug(job.company)}-${slug(job.title)}`);
   mkdirSync(outDir, { recursive: true });
   outDirSoFar = outDir;
   writeFileSync(join(outDir, "job.json"), JSON.stringify(job, null, 2));
   writeFileSync(join(outDir, "fit.json"), JSON.stringify(fit, null, 2));
+  if (matches) writeFileSync(join(outDir, "evidence.json"), JSON.stringify({ retriever: deps.retriever!.description, matches }, null, 2));
 
   const threshold = profile.automation.scoreThreshold;
   if (fit.score < threshold && !opts.userConfirmed) {
@@ -105,7 +119,7 @@ export async function runJob(
   const gaps = fit.gaps.map((g) => `${g.requirement} (${g.severity})`);
   const [briefing, edit, questions] = await Promise.all([
     writeBriefing(llm, job).catch((e: Error) => ({ markdown: `# Briefing failed\n\n${e.message}\n`, sources: [] })),
-    tailor(llm, job, resume, fit),
+    tailor(llm, job, resume, fit, evidence),
     generateQuestions(llm, job, resumeText, gaps),
   ]);
   writeFileSync(join(outDir, "briefing.md"), briefing.markdown);
@@ -164,7 +178,7 @@ export async function runJob(
     outDir,
   });
 
-  writeFileSync(join(outDir, "report.md"), report(job, fit.score, status, reason, outcome, edit.rejected.map((r) => `${r.where}: ${r.reason}`), edit.output.unsupportedRequirements));
+  writeFileSync(join(outDir, "report.md"), report(job, fit.score, status, reason, outcome, edit.rejected.map((r) => `${r.where}: ${r.reason}`), edit.output.unsupportedRequirements, matches));
   return { job, status, score: fit.score, reason, outDir };
   } catch (e) {
     const reason = e instanceof BrowserSetupError ? e.message : `Something went wrong: ${(e as Error).message.split("\n")[0]}`;
@@ -177,13 +191,18 @@ export async function runJob(
   }
 }
 
-function report(job: Job, score: number | null, status: string, reason: string, outcome: SubmitOutcome | null, rejected: string[], unsupported: string[] = []): string {
+function report(job: Job, score: number | null, status: string, reason: string, outcome: SubmitOutcome | null, rejected: string[], unsupported: string[] = [], matches: EvidenceMatch[] | null = null): string {
   return [
     `# ${job.title} at ${job.company}`,
     `- URL: ${job.url}`,
     `- Fit: ${score ?? "n/a"}/10`,
     `- Status: **${status}**: ${reason}`,
     unsupported.length ? `\n## Requirements your resume doesn't cover (be ready to address)\n${unsupported.map((u) => `- ${u}`).join("\n")}` : "",
+    matches?.length
+      ? `\n## Evidence map\n| Requirement | Must | Best evidence | Score |\n|---|---|---|---|\n${matches
+          .map((m) => `| ${m.requirement.replace(/\|/g, "/")} | ${m.mustHave ? "yes" : ""} | ${m.supported ? `${m.hits[0].chunkId}: ${m.hits[0].text.replace(/\|/g, "/").slice(0, 90)}` : "**no evidence**"} | ${m.hits[0]?.score ?? ""} |`)
+          .join("\n")}`
+      : "",
     rejected.length ? `\n## Editor claims thrown out by the honesty guard\n${rejected.map((r) => `- ${r}`).join("\n")}` : "",
     outcome?.answers.length
       ? `\n## What went into the form\n| Field | Req | Value | Source | Filled |\n|---|---|---|---|---|\n${outcome.answers

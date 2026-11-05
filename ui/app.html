@@ -527,7 +527,8 @@ document.addEventListener("keydown", (e) => e.key === "Escape" && closeDrawer())
 
 function renderDrawer() {
   const { row, fit, edit } = DR.data, appRow = APPS.rows.find((x) => x.key === row.key) || row;
-  const tabs = [["overview", "Overview"], ["honesty", `Honesty${edit?.rejected?.length ? ` (${edit.rejected.length})` : ""}`], ["diff", "Résumé changes"], ["prep", "Interview prep"], ["briefing", "Briefing"], ["cover", "Cover note"], ["form", "Form"]];
+  const ev = DR.data.evidence?.matches || [];
+  const tabs = [["overview", "Overview"], ["evidence", `Evidence${ev.length ? ` (${ev.filter((m) => m.supported).length}/${ev.length})` : ""}`], ["honesty", `Honesty${edit?.rejected?.length ? ` (${edit.rejected.length})` : ""}`], ["diff", "Résumé changes"], ["prep", "Interview prep"], ["briefing", "Briefing"], ["cover", "Cover note"], ["form", "Form"]];
   const canSubmit = ["ready", "needs_manual", "failed", "skipped"].includes(row.status);
   $("#drawer").innerHTML = `<header>
     <div class="row1">${ring(row.score)}<div><h2>${esc(row.title)}</h2><div class="co">${esc(row.company)} · ${pill(row.status, activeFor(row.key))} · <a href="${esc(row.url)}" target="_blank" rel="noopener">posting ↗</a></div></div><button class="ghost close" id="dClose" aria-label="Close">✕</button></div>
@@ -554,6 +555,16 @@ async function renderPane() {
     p.innerHTML = `${d.fit ? `<p>${esc(d.fit.summary)}</p>${whyBody({ ...d.fit, plan: d.fit.closeTheGap })}` : '<p class="hint">Skipped by your hard rules before scoring.</p>'}
       <h3 style="font-size:14px;margin:18px 0 6px">What happened</h3><p>${esc(d.row.notes || "—")}</p>
       ${pdfs.length ? `<h3 style="font-size:14px;margin:18px 0 6px">Documents sent</h3><p>${pdfs.map((f) => `<a href="${fileUrl(key, f)}" target="_blank">📄 ${esc(f)}</a>`).join(" &nbsp; ")}</p>` : ""}`;
+  } else if (DR.tab === "evidence") {
+    const e = d.evidence;
+    if (!e) { p.innerHTML = '<p class="hint">No evidence map for this role (it was skipped before retrieval, or retrieval was off).</p>'; return; }
+    const sup = e.matches.filter((m) => m.supported).length, must = e.matches.filter((m) => m.mustHave), mustSup = must.filter((m) => m.supported).length;
+    p.innerHTML = `<p class="hint">Each requirement from the posting was searched against your own résumé bullets and notes (${esc(e.retriever)}). The fit score and the tailored résumé are built on these matches; requirements with no evidence are never claimed.</p>
+      <p><b>${sup}/${e.matches.length}</b> requirements have evidence · <b>${mustSup}/${must.length}</b> must-haves</p>
+      <table class="plain"><tr><th>Requirement</th><th>Your evidence</th><th>Score</th></tr>${e.matches.map((m) => `<tr>
+        <td>${m.mustHave ? "" : '<span class="pill">nice</span> '}${esc(m.requirement)}</td>
+        <td>${m.supported ? m.hits.slice(0, 2).map((h) => `<div><span class="hint">${esc(h.source)} · ${esc(h.chunkId)}</span><br>${esc(h.text)}</div>`).join('<hr style="border:0;border-top:1px dashed var(--line)">') : '<span style="color:var(--amber);font-weight:600">No evidence: not claimed</span>'}</td>
+        <td>${m.hits[0] ? m.hits[0].score : ""}</td></tr>`).join("")}</table>`;
   } else if (DR.tab === "honesty") {
     const rej = d.edit?.rejected || [], un = d.edit?.output?.unsupportedRequirements || [];
     p.innerHTML = `<div class="promise">🛡 job-agent never adds experience you don't have. The editor can only reorder and reword your own bullets; anything new it tries to add is caught in code and removed before your résumé is built.</div>

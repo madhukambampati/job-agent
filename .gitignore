@@ -8,3 +8,5 @@ out/
 *.log
 data-demo/
 data-sandbox/
+config/evidence/*
+!config/evidence/README.md

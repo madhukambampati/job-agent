@@ -6,11 +6,12 @@ import { Ledger } from "./agents/ledger.js";
 import { hardRuleViolations } from "./agents/rules.js";
 import { launchBrowser } from "./browser.js";
 import { fetchJob } from "./jobs/fetch.js";
-import { AnthropicLLM } from "./llm.js";
+import { createLLM } from "./providers.js";
 import { runJob, type RunOptions } from "./pipeline.js";
 import { loadProfile } from "./profile.js";
 import { parseResume, resumeForPrompt } from "./resume.js";
 import { spar } from "./spar.js";
+import { createRetriever } from "./rag/index.js";
 import { LedgerStatusSchema } from "./types.js";
 
 try {
@@ -43,14 +44,16 @@ program
 
 async function runMany(urls: string[], opts: RunOptions) {
   const { profile, resumeMarkdown } = loadProfile();
-  const llm = new AnthropicLLM();
+  const llm = createLLM();
   const ledger = new Ledger();
   const browser = await launchBrowser();
+  const retriever = createRetriever(parseResume(resumeMarkdown));
+  console.log(`evidence retrieval: ${retriever.description}`);
   try {
     for (const url of urls) {
       console.log(`\n▶ ${url}`);
       try {
-        const r = await runJob(url, { llm, profile, resumeMarkdown, ledger, browser }, { ...opts, log: (m) => console.log(`  · ${m}`) });
+        const r = await runJob(url, { llm, profile, resumeMarkdown, ledger, browser, retriever }, { ...opts, log: (m) => console.log(`  · ${m}`) });
         console.log(`  ${r.status.toUpperCase()}  ${r.job.company} – ${r.job.title}  fit ${r.score ?? "-"}/10\n  ${r.reason}${r.outDir ? `\n  files: ${r.outDir}` : ""}`);
       } catch (e) {
         console.error(`  ERROR ${(e as Error).message}`);
@@ -90,7 +93,7 @@ program
     const job = await fetchJob(url);
     const hard = hardRuleViolations(job, profile);
     if (hard.length) console.log(`Hard-rule skip: ${hard.join("; ")}`);
-    const fit = await scoreFit(new AnthropicLLM(), job, resumeForPrompt(parseResume(resumeMarkdown)));
+    const fit = await scoreFit(createLLM(), job, resumeForPrompt(parseResume(resumeMarkdown)));
     console.log(`${job.company} – ${job.title}: ${fit.score}/10\n${fit.summary}\n\nStrengths:\n${fit.strengths.map((s) => `  + ${s}`).join("\n")}\nGaps:\n${fit.gaps.map((g) => `  - [${g.severity}] ${g.requirement}: ${g.note}`).join("\n")}`);
   });
 
@@ -102,7 +105,7 @@ program
   .option("-r, --rounds <n>", "follow-up rounds on the weakest answer", "3")
   .action(async (dir: string, o) => {
     const { resumeMarkdown } = loadProfile();
-    await spar(new AnthropicLLM(), dir, resumeForPrompt(parseResume(resumeMarkdown)), { count: +o.count, drillRounds: +o.rounds });
+    await spar(createLLM(), dir, resumeForPrompt(parseResume(resumeMarkdown)), { count: +o.count, drillRounds: +o.rounds });
   });
 
 const ledgerCmd = program.command("ledger").description("One row per role: applied, followed up, next step, date");

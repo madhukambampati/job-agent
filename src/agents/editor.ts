@@ -25,7 +25,7 @@ export interface EditResult {
   rejected: { where: string; text: string; reason: string }[];
 }
 
-export async function tailor(llm: LLM, job: Job, resume: Resume, fit: FitScore): Promise<EditResult> {
+export async function tailor(llm: LLM, job: Job, resume: Resume, fit: FitScore, evidence = ""): Promise<EditResult> {
   const raw = await llm.structured({
     system: SYSTEM,
     toolName: "record_edit",
@@ -37,7 +37,7 @@ POSTING:
 ${job.description.slice(0, 12000)}
 
 FILTER NOTES (gaps to be honest about): ${fit.gaps.map((g) => `${g.requirement} (${g.severity})`).join("; ") || "none"}
-
+${evidence ? `\nEVIDENCE MAP (which of the candidate's own bullets support each requirement; lead with these, and list every NO EVIDENCE requirement in unsupportedRequirements):\n${evidence}\n` : ""}
 RESUME (bullet ids in brackets):
 ${resumeForPrompt(resume)}`,
   });

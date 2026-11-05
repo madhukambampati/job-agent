@@ -23,14 +23,19 @@ would honestly raise the score toward 8:
 - "build-proof": a small public project that would demonstrate it.
 Never suggest claiming experience the candidate doesn't have.`;
 
-export async function scoreFit(llm: LLM, job: Job, resumeText: string): Promise<FitScore> {
+/**
+ * `evidence` is the retrieved evidence map (requirement -> your own matching
+ * bullets, or NO EVIDENCE FOUND). It grounds the score in what you've done
+ * rather than in keyword overlap.
+ */
+export async function scoreFit(llm: LLM, job: Job, resumeText: string, evidence = ""): Promise<FitScore> {
   return llm.structured({
     system: SYSTEM,
     toolName: "record_fit",
     toolDescription: "Record the fit score, strengths and gaps for this job.",
     schema: FitScoreSchema,
     maxTokens: 2048,
-    prompt: `JOB: ${job.title} at ${job.company} (${job.location})
+    prompt: `${evidence ? `EVIDENCE MAP (retrieved from the candidate's own résumé and notes; trust it over keyword overlap):\n${evidence}\n\n` : ""}JOB: ${job.title} at ${job.company} (${job.location})
 ${job.compensation ? `PAY: ${job.compensation}\n` : ""}
 POSTING:
 ${job.description.slice(0, 15000)}
