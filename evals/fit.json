@@ -1,0 +1,13 @@
+{
+  "about": "Expected fit bands for the example résumé (config/resume.example.md) against the sandbox postings, labelled by the maintainer from the postings' must-haves. 'high' = 7+, 'mid' = 5-7, 'low' = 5 or less. Synthetic data: a sanity check that scores move the right way, not a benchmark.",
+  "cases": [
+    { "board": "maplewave", "band": "high", "why": "Every must-have is on the résumé" },
+    { "board": "evalforge", "band": "high", "why": "LLM eval harness + golden datasets + TypeScript/Python" },
+    { "board": "northpine", "band": "high", "why": "QA automation, Playwright, API testing; SQL Server/PostgreSQL not shown" },
+    { "board": "quillmind", "band": "high", "why": "Non-deterministic LLM output testing, Playwright, API" },
+    { "board": "auroralabs", "band": "mid", "why": "Core QA fits; mentoring not shown; Go/Bazel nice-to-haves missing" },
+    { "board": "cedarloop", "band": "mid", "why": "Payments/e-commerce testing not on the résumé" },
+    { "board": "polarisdefence", "band": "mid", "why": "Strong QA fit but clearance eligibility unknown" },
+    { "board": "lakeshore-analytics", "band": "low", "why": "People-management role: team of 6+, hiring, budget" }
+  ]
+}

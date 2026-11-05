@@ -1,0 +1,79 @@
+{
+  "at": "2026-11-05T04:44:02.846Z",
+  "results": [
+    {
+      "suite": "Honesty guard",
+      "setup": "26 fabricated + 13 legitimate edits to the example résumé",
+      "metrics": {
+        "fabrications caught %": 96.2,
+        "term/number fabrications caught %": 100,
+        "scope/scale inflation caught %": 87.5,
+        "held-out hard cases caught %": 75,
+        "legit edits wrongly rejected %": 0
+      },
+      "floors": {
+        "term/number fabrications caught %": 100,
+        "fabrications caught %": 90,
+        "legit edits wrongly rejected %": 0
+      },
+      "notes": [
+        "missed (heldout-expert): \"Became the go-to expert for LLM testing, building an evaluation harness with a golden dataset.\""
+      ]
+    },
+    {
+      "suite": "Requirement extraction",
+      "setup": "17 sandbox postings",
+      "metrics": {
+        "precision %": 100,
+        "recall %": 100,
+        "must/nice labelled right %": 100
+      },
+      "floors": {
+        "precision %": 95,
+        "recall %": 95,
+        "must/nice labelled right %": 95
+      },
+      "notes": []
+    },
+    {
+      "suite": "Evidence retrieval (local:tfidf)",
+      "setup": "15 requirements with evidence (5 paraphrased) + 6 with none, example résumé",
+      "metrics": {
+        "hit@1 %": 80,
+        "recall@3 %": 86.7,
+        "MRR": 0.822,
+        "paraphrase recall@3 %": 60,
+        "supported when evidence exists %": 66.7,
+        "'no evidence' correctly reported %": 100
+      },
+      "floors": {
+        "recall@3 %": 85,
+        "'no evidence' correctly reported %": 80
+      },
+      "notes": [
+        "no relevant hit in top 3 for \"Keep the build pipeline green and fast\" (got summary, skills.1, skills.2)",
+        "evidence found but below threshold for \"Keep the build pipeline green and fast\" (0.051)",
+        "evidence found but below threshold for \"Assess the quality of generative model outputs\" (0.061)",
+        "no relevant hit in top 3 for \"Make sure our apps work on phones\" (got summary, skills.1, skills.2)",
+        "evidence found but below threshold for \"Make sure our apps work on phones\" (0)",
+        "evidence found but below threshold for \"Write automated checks for web user interfaces\" (0.047)",
+        "evidence found but below threshold for \"Reduce the time it takes to run the full regression\" (0.086)"
+      ]
+    },
+    {
+      "suite": "Form answers (sandbox employers, real browser)",
+      "setup": "Greenhouse/Lever/Ashby-style forms for 16 sandbox postings, example profile, dry run",
+      "metrics": {
+        "known fields answered correctly %": 100,
+        "unanswerable questions left blank %": 100,
+        "runs stopped for a human when they should %": 100
+      },
+      "floors": {
+        "known fields answered correctly %": 98,
+        "unanswerable questions left blank %": 100,
+        "runs stopped for a human when they should %": 100
+      },
+      "notes": []
+    }
+  ]
+}

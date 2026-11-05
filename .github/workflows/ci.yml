@@ -13,3 +13,9 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - run: npm run typecheck
       - run: npm test
+      - name: Evals (deterministic suites, fail below floors)
+        run: npm run eval -- --ci
+      - uses: actions/upload-artifact@v4
+        with:
+          name: eval-results
+          path: evals/RESULTS.md

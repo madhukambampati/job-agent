@@ -98,6 +98,14 @@ export function honestyProblem(
   for (const k of keywordsUsed) {
     if (!hasWord(corpus, k)) return `keyword "${k}" is not in the base resume`;
   }
+  // Scope and scale: leadership verbs and size words must already be in the bullet being reworded.
+  // Catches "Managed the team that built…", "company-wide", "used by 2 million people", "Halved CI time".
+  if (sourceText) {
+    for (const m of text.matchAll(SCOPE)) {
+      const word = m[0];
+      if (!new RegExp(`\\b${word.toLowerCase().replace(/[^a-z]+/g, ".?")}`).test(sourceText.toLowerCase())) return `scope claim "${word}" is not in the original bullet`;
+    }
+  }
   // Numbers (metrics, years, team sizes) must already exist in the source bullet (or anywhere, for summaries/notes).
   const numberSource = opts.checkNumbersAgainstCorpus || !sourceText ? corpus : sourceText.toLowerCase() + " " + corpus;
   for (const n of text.match(/\d+(?:[.,]\d+)?\s*%?/g) ?? []) {
@@ -122,6 +130,8 @@ const ORDINARY_CAPS = new Set([
 ]);
 
 /** Capitalised words that don't start a sentence: almost always product, tool or company names. */
+const SCOPE = /\b(led|lead|leading|managed|manag(?:e|ing)|head(?:ed|ing)|direct(?:ed|ing)|architect(?:ed|ing)|spearhead(?:ed|ing)|pioneer(?:ed|ing)|own(?:ed|ing)|drove|driving|mentor(?:ed|ing)|company-wide|org(?:anization)?-wide|enterprise-wide|across the (?:company|org|organization)|million|billion|thousands|hundreds|halved|doubled|tripled|\d+x)\b/gi;
+
 /** Capitalised two-letter words that are just English, not names (Go, R and C# are names). */
 const SHORT_WORDS = new Set(["In", "At", "To", "Of", "On", "As", "By", "Or", "An", "If", "It", "Is", "We", "My", "So", "Up", "Do", "No", "Be", "He", "Me", "Us"]);
 

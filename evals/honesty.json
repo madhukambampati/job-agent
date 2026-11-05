@@ -1,0 +1,263 @@
+{
+  "about": "Edits the editor might propose for config/resume.example.md. 'fabricated' edits add something the r\u00e9sum\u00e9 doesn't support and must be rejected; 'legit' edits only reword or reorder what's there and must be accepted. Some fabrications are deliberately hard (scope inflation in plain words) to measure what the guard can't catch. Cases marked 'heldout' were written after the scope rule was added, to check it generalises.",
+  "cases": [
+    {
+      "id": "num-tests",
+      "kind": "fabricated",
+      "where": "r1.b1",
+      "text": "Built a Playwright + TypeScript framework covering 900 UI and API tests, cutting regression time from 2 days to 3 hours."
+    },
+    {
+      "id": "num-percent",
+      "kind": "fabricated",
+      "where": "r1.b1",
+      "text": "Built a Playwright + TypeScript framework covering 400 UI and API tests, cutting regression time by 90%."
+    },
+    {
+      "id": "num-near-miss",
+      "kind": "fabricated",
+      "where": "r2.b1",
+      "text": "Automated REST API contract tests in Python with pytest, catching 300 breaking changes before release."
+    },
+    {
+      "id": "num-team",
+      "kind": "fabricated",
+      "where": "r1.b1",
+      "text": "Led a team of 6 engineers building a Playwright + TypeScript framework covering 400 tests."
+    },
+    {
+      "id": "num-years",
+      "kind": "fabricated",
+      "where": "summary",
+      "text": "Senior SDET with 12 years building test automation for web and API products, now focused on testing LLM and agentic features."
+    },
+    {
+      "id": "tool-k8s",
+      "kind": "fabricated",
+      "where": "r1.b3",
+      "text": "Wired tests into GitHub Actions and Kubernetes with parallel shards and flaky-test quarantine."
+    },
+    {
+      "id": "tool-circleci",
+      "kind": "fabricated",
+      "where": "r1.b3",
+      "text": "Wired tests into CircleCI with parallel shards and flaky-test quarantine."
+    },
+    {
+      "id": "tool-go-golden",
+      "kind": "fabricated",
+      "where": "r2.b1",
+      "text": "Automated REST API contract tests in Go, catching 30 breaking changes before release."
+    },
+    {
+      "id": "tool-grpc",
+      "kind": "fabricated",
+      "where": "r2.b1",
+      "text": "Automated gRPC and REST contract tests in Python with pytest, catching 30 breaking changes before release."
+    },
+    {
+      "id": "tool-langchain",
+      "kind": "fabricated",
+      "where": "r1.b2",
+      "text": "Built an evaluation harness with LangChain for an LLM feature using a golden dataset of unsafe prompts."
+    },
+    {
+      "id": "tool-bedrock",
+      "kind": "fabricated",
+      "where": "r1.b2",
+      "text": "Built an evaluation harness on AWS Bedrock for an LLM feature using a golden dataset."
+    },
+    {
+      "id": "tool-react-native",
+      "kind": "fabricated",
+      "where": "r2.b2",
+      "text": "Maintained Appium mobile suites for Android, iOS and React Native."
+    },
+    {
+      "id": "tool-rust",
+      "kind": "fabricated",
+      "where": "r1.b1",
+      "text": "Built a Playwright framework with a Rust runner covering 400 UI and API tests."
+    },
+    {
+      "id": "tool-kotlin",
+      "kind": "fabricated",
+      "where": "r2.b2",
+      "text": "Maintained Appium mobile suites for Android and iOS, plus Kotlin Espresso tests."
+    },
+    {
+      "id": "tool-postman",
+      "kind": "fabricated",
+      "where": "r2.b1",
+      "text": "Automated REST API contract tests with Postman and pytest, catching 30 breaking changes before release."
+    },
+    {
+      "id": "tool-ragas",
+      "kind": "fabricated",
+      "where": "r1.b2",
+      "text": "Built an evaluation harness for an LLM feature scored with Ragas metrics on a golden dataset."
+    },
+    {
+      "id": "cert-aws",
+      "kind": "fabricated",
+      "where": "summary",
+      "text": "AWS Certified Senior SDET with 8 years building test automation for web and API products."
+    },
+    {
+      "id": "declared-kafka",
+      "kind": "fabricated",
+      "where": "r1.b3",
+      "text": "Wired event-driven tests into GitHub Actions with parallel shards.",
+      "keywordsUsed": [
+        "Kafka"
+      ]
+    },
+    {
+      "id": "scope-managed",
+      "kind": "fabricated",
+      "hard": true,
+      "where": "r1.b2",
+      "text": "Managed the team that built an evaluation harness for an LLM feature using a golden dataset."
+    },
+    {
+      "id": "scope-architected",
+      "kind": "fabricated",
+      "hard": true,
+      "where": "r1.b2",
+      "text": "Architected the company-wide evaluation platform for every LLM feature, using golden datasets of unsafe prompts."
+    },
+    {
+      "id": "metric-in-words",
+      "kind": "fabricated",
+      "hard": true,
+      "where": "r1.b3",
+      "text": "Halved CI time by wiring tests into GitHub Actions with parallel shards and flaky-test quarantine."
+    },
+    {
+      "id": "heldout-pioneered",
+      "kind": "fabricated",
+      "hard": true,
+      "heldout": true,
+      "where": "r1.b2",
+      "text": "Pioneered LLM evaluation at the company with a golden dataset of unsafe prompts."
+    },
+    {
+      "id": "heldout-mentored",
+      "kind": "fabricated",
+      "hard": true,
+      "heldout": true,
+      "where": "r1.b1",
+      "text": "Mentored engineers while building a Playwright + TypeScript framework covering 400 UI and API tests."
+    },
+    {
+      "id": "heldout-thousands",
+      "kind": "fabricated",
+      "hard": true,
+      "heldout": true,
+      "where": "r2.b1",
+      "text": "Automated thousands of REST API contract tests in Python with pytest."
+    },
+    {
+      "id": "heldout-expert",
+      "kind": "fabricated",
+      "hard": true,
+      "heldout": true,
+      "where": "r1.b2",
+      "text": "Became the go-to expert for LLM testing, building an evaluation harness with a golden dataset."
+    },
+    {
+      "id": "number-reused",
+      "kind": "fabricated",
+      "hard": true,
+      "where": "r1.b2",
+      "text": "Built an evaluation harness for an LLM feature used by 2 million people, using a golden dataset of unsafe prompts."
+    },
+    {
+      "id": "rephrase-1",
+      "kind": "legit",
+      "where": "r1.b1",
+      "text": "Built a Playwright + TypeScript framework with 400 UI and API tests, cutting regression time from 2 days to 3 hours."
+    },
+    {
+      "id": "rephrase-2",
+      "kind": "legit",
+      "where": "r1.b2",
+      "text": "Built an LLM evaluation harness on a golden dataset of happy-path, edge-case and unsafe prompts."
+    },
+    {
+      "id": "rephrase-3",
+      "kind": "legit",
+      "where": "r1.b3",
+      "text": "Ran tests in GitHub Actions with parallel shards and quarantined flaky tests."
+    },
+    {
+      "id": "reorder-1",
+      "kind": "legit",
+      "where": "r2.b1",
+      "text": "Caught 30 breaking changes before release with REST API contract tests in Python and pytest."
+    },
+    {
+      "id": "reorder-2",
+      "kind": "legit",
+      "where": "r2.b2",
+      "text": "Maintained mobile test suites for Android and iOS with Appium."
+    },
+    {
+      "id": "skill-from-list",
+      "kind": "legit",
+      "where": "r1.b3",
+      "text": "Wired tests into Jenkins and GitHub Actions with parallel shards."
+    },
+    {
+      "id": "jd-language",
+      "kind": "legit",
+      "where": "r1.b2",
+      "text": "Tested agentic workflows with LLM-as-judge scoring and golden datasets of unsafe prompts.",
+      "keywordsUsed": [
+        "LLM-as-judge",
+        "golden datasets"
+      ]
+    },
+    {
+      "id": "summary-tight",
+      "kind": "legit",
+      "where": "summary",
+      "text": "Senior SDET with 8 years of web and API test automation, now testing LLM and agentic features."
+    },
+    {
+      "id": "ordinary-capitals",
+      "kind": "legit",
+      "where": "r1.b3",
+      "text": "Wired tests into GitHub Actions. In practice that meant parallel shards and flaky-test quarantine."
+    },
+    {
+      "id": "mixed-case-tool",
+      "kind": "legit",
+      "where": "r2.b2",
+      "text": "Maintained Appium suites for iOS and Android."
+    },
+    {
+      "id": "typescript-first",
+      "kind": "legit",
+      "where": "r1.b1",
+      "text": "Built a TypeScript test framework on Playwright covering 400 UI and API tests."
+    },
+    {
+      "id": "keyword-declared-ok",
+      "kind": "legit",
+      "where": "r2.b1",
+      "text": "Automated REST API contract tests in Python with pytest.",
+      "keywordsUsed": [
+        "pytest",
+        "Python"
+      ]
+    },
+    {
+      "id": "heldout-legit-led-source",
+      "kind": "legit",
+      "heldout": true,
+      "where": "r1.b3",
+      "text": "Wired tests into GitHub Actions; parallel shards and flaky-test quarantine kept runs fast."
+    }
+  ]
+}
