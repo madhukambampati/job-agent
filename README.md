@@ -1,34 +1,108 @@
 # job-agent
 
-Five small AI agents for a tech job search, each with one job and one way of thinking, plus the part they can't do alone: **actually applying**.
+**A multi-agent system that finds jobs, tailors an application from evidence, and submits it through the employer's own form, with guardrails in code so it never claims experience you don't have.**
+
+TypeScript · Claude or Cohere Command · Cohere Embed + Rerank (RAG) · Playwright · zod · 67 tests + an eval harness in CI
+
+![Find view: match cards with fit scores and live application progress](docs/screenshots/find.png)
+
+## What it does
+
+You type *"SDET or QA automation jobs, remote in Canada"*. The system:
+
+1. **Finds** open postings on Greenhouse, Lever and Ashby and drops the ones that don't fit your rules (location, work mode, contract, pay floor, already applied), saying how many it dropped and why.
+2. **Retrieves evidence.** Every requirement in the posting is searched against your own résumé bullets and notes (Cohere Embed → cosine top-k → Cohere Rerank). Requirements with no evidence are marked, not papered over.
+3. **Scores fit** from that evidence map, lists gaps, and suggests an honest plan to close them.
+4. **Tailors** the résumé and cover note: the editor can only reorder and reword your own bullets, and a code-level honesty guard removes anything new (tools, numbers, scope claims) before the PDF is built.
+5. **Applies** by driving the employer's real form in a browser: profile answers first, a constrained model only for leftovers, and it stops for you on captchas or any required question it can't answer truthfully.
+6. **Tracks** everything: status per role, the exact answers and documents that went out, interview prep, follow-up dates.
+
+## Architecture
+
+```mermaid
+flowchart LR
+  Q[Chat search] --> D[Discovery<br/>web search on ATS domains<br/>+ remembered boards]
+  D --> R[Hard rules<br/>code, no model]
+  R --> E[Evidence retrieval<br/>Cohere Embed + Rerank<br/>over résumé + notes]
+  E --> F[Fit agent]
+  F -->|>= threshold, or you clicked Apply| P{{parallel}}
+  P --> B[Briefing agent<br/>web search]
+  P --> ED[Editor agent] --> G[Honesty guard<br/>code]
+  P --> S[Sparring agent<br/>interview questions]
+  G --> PDF[Résumé + cover letter PDFs]
+  PDF --> SUB[Submitter<br/>Playwright on the employer's form]
+  SUB -->|captcha / unanswerable / Ashby| NY[Needs you]
+  SUB --> L[(Ledger)]
+  NY --> L
+```
+
+Each agent has its own prompt, inputs and typed output (JSON-schema structured output, validated again with zod). The fit agent never sees the cover note; the editor never sees the briefing. A screener that's also selling you the job scores generously, and a writer that also judges fit writes defensively, so they're kept apart.
+
+## Design decisions
+
+| Decision | Why |
+|---|---|
+| **Guardrails live in code, after the model** | Prompts can be talked around. Hard rules run before any model call; the honesty guard runs after the editor and checks every rewrite against your résumé (whole-word terms, numbers, scope/scale words). Eval: 100% of invented tools/numbers caught, 0% of legitimate edits rejected. |
+| **RAG over your own evidence, not keyword overlap** | The fit score and the tailored résumé cite which of your bullets support each requirement. "No evidence" is a first-class result, shown in the UI and never claimed. |
+| **Model only where judgment is needed** | Requirement extraction, location filtering, standard form fields and the guard are deterministic code. Models do fit judgment, rewriting, interview questions and the free-text answers profile data can't cover. |
+| **Abstain instead of guess** | Unknown form answers come back `UNKNOWN`; any unanswered *required* field stops submission and puts the role in a "Needs you" queue with the exact question. |
+| **Provider-agnostic** | `JOB_AGENT_PROVIDER=cohere` runs every agent decision on Cohere Command; Claude remains for web search. Retrieval uses Cohere Embed/Rerank when a key is set and an offline TF-IDF embedder otherwise. |
+| **A sandbox to test the whole thing safely** | `npm run sandbox` serves 17 fictional postings through the real Greenhouse/Lever/Ashby API shapes and employer forms that validate like real ones, plus an "employer inbox" showing exactly what was received. It found three real bugs before any real application went out. |
+| **Failures are recorded, not lost** | Every failure after the posting is read becomes a ledger row with a plain-language reason, the fit score and documents kept. |
+
+## Evals
+
+`npm run eval` runs the deterministic suites (no keys, no network) and CI fails if any metric drops below its floor. Latest numbers are in [evals/RESULTS.md](evals/RESULTS.md).
+
+| Suite | Setup | Result |
+|---|---|---|
+| Honesty guard | 26 fabricated + 13 legitimate edits | **100%** invented tools/numbers caught · **96%** of all fabrications · **0%** legit edits rejected |
+| Requirement extraction | 17 postings | **100%** precision / recall |
+| Evidence retrieval, offline TF-IDF | 15 requirements with evidence + 6 without | recall@3 **87%** · paraphrases **60%** · "no evidence" reported correctly **100%** |
+| Evidence retrieval, Cohere Embed + Rerank | same | run `npm run eval` with `COHERE_API_KEY` |
+| Form answers (real browser) | 16 sandbox employer forms | **100%** known fields correct · **100%** unanswerable questions left blank · **100%** captcha/unanswerable runs stopped for a human |
+| Fit scoring | 8 labelled postings | run `npm run eval -- --llm` |
+
+What the evals found and what's still open:
+
+- The first run showed the guard missed **scope inflation** ("Managed the team that built…", "company-wide", "used by 2 million people"). A scope/scale rule fixed those; held-out cases written afterwards check it generalises (3 of 4 caught). *"Became the go-to expert for LLM testing"* still gets through, and is reported rather than hidden.
+- Offline retrieval handles shared vocabulary but misses paraphrases ("make sure our apps work on phones" → the Appium bullet). That's the case semantic embeddings are for.
+- The fit and Cohere suites call paid APIs, so they're opt-in rather than in CI. Fit labels are the maintainer's, on synthetic postings: a direction check, not a benchmark.
+
+## Screens
+
+| | |
+|---|---|
+| ![Applications with status pills and documents](docs/screenshots/applications.png) | ![Evidence map per requirement](docs/screenshots/evidence.png) |
+| **Applications**: live status per role, tailored résumé and cover letter, filter tabs | **Evidence**: each requirement, the bullets that support it, or "no evidence" |
+| ![Honesty report](docs/screenshots/honesty.png) | ![Sandbox employer inbox](docs/screenshots/employer-inbox.png) |
+| **Honesty**: claims removed and why, requirements left unclaimed | **Sandbox employer inbox**: exactly what a submission sent |
+
+## Project layout
 
 ```
-job URL ─► 1. FILTER ──(score < 7)──► skip, logged
-               │ ≥ 7
-               ├─► 2. BRIEFING WRITER   one-page company brief (last 90 days, team leads, eng signals)
-               ├─► 3. EDITOR            re-ranked bullets + cover note, behind an honesty guard
-               └─► 4. SPARRING PARTNER  10 likely questions; `spar` grills you on your weakest answer
-                         │
-                         ▼
-                    SUBMITTER  opens the employer's Greenhouse / Lever / Ashby form,
-                               fills it, uploads the tailored PDFs, submits, confirms
-                         │
-                         ▼
-               5. LEDGER   one row per role: applied, followed up, next step, date
+src/
+  agents/      filter (fit), editor + honesty guard, briefing, sparring, ledger, hard rules
+  rag/         evidence chunks, requirement extraction, Cohere Embed/Rerank clients, local embedder, retriever
+  submit/      form scanning, answer resolution, submitter
+  jobs/        Greenhouse / Lever / Ashby posting APIs
+  sandbox/     fictional job market, employer forms + inbox, offline model
+  evals/       eval runner (datasets in evals/)
+  ui/          local web app server
+  providers.ts Claude / Cohere Command
+  pipeline.ts  one role end to end
+ui/app.html    the web app
+tests/         unit, browser end-to-end, sandbox, provider and RAG tests
 ```
 
-## Why separate agents
-
-Each agent gets its own system prompt, its own inputs, and returns a typed object (zod-validated, via forced tool calls). The filter never sees the cover note; the editor never sees the briefing. A screener that's also trying to sell you on the job scores generously; a writer that also judges fit writes defensively. Keeping them apart keeps each one honest at its own task.
-
-## Guardrails (the part that matters when it submits for you)
+## Guardrails in detail
 
 Rules that must never be broken live **in code**, not in prompts:
 
 | Guard | Where | What it does |
 |---|---|---|
 | Hard rules | `agents/rules.ts` | Skips contract/temp/fixed-term, non-remote, and postings whose pay tops out under your floor *before* any model call |
-| Honesty guard | `agents/editor.ts` | Every rewritten bullet is checked against your base resume: new tools, tech terms, or numbers that aren't already there get thrown out and listed in `report.md` |
+| Honesty guard | `agents/editor.ts` | Every rewritten bullet is checked against your base résumé: new tools, tech terms, numbers, or scope/scale claims (led, company-wide, millions…) that aren't already there are removed and listed in the report and the Honesty tab |
 | No guessing | `submit/answers.ts` | Form answers come from your profile and answer bank first. Leftovers go to a model that may only use your facts or say `UNKNOWN` |
 | Required-field gate | `submit/submitter.ts` | If any required field can't be answered truthfully, it doesn't submit; status becomes `needs_manual` with the exact question |
 | Captchas | `submit/form.ts` | Detected and stopped at. Never solved or bypassed |
@@ -36,6 +110,7 @@ Rules that must never be broken live **in code**, not in prompts:
 | Demographic questions | `submit/answers.ts` | Always "decline to self-identify" when that option exists |
 
 Every run writes `report.md` with the full table of what went into the form, where each value came from, and what the honesty guard rejected.
+
 
 ## Setup
 
@@ -45,7 +120,7 @@ npx playwright install chromium        # or set JOB_AGENT_CHROME_PATH to an inst
 npx tsx src/cli.ts init                 # creates config/profile.yaml, config/resume.md, .env (all gitignored)
 ```
 
-Fill in `.env` (`ANTHROPIC_API_KEY`), `config/profile.yaml`, and `config/resume.md` (format shown in `config/resume.example.md`).
+Fill in `.env` (`ANTHROPIC_API_KEY`, optionally `COHERE_API_KEY`), `config/profile.yaml`, and `config/resume.md` (format shown in `config/resume.example.md`). Put any extra evidence (project write-ups, notes about your work) in `config/evidence/*.md`; each bullet or paragraph becomes retrievable evidence.
 
 ## Use
 
@@ -139,7 +214,12 @@ LinkedIn Easy Apply and Workday are deliberately not automated: both actively bl
 npm test
 ```
 
-Unit tests cover URL parsing, ATS mapping, hard rules, the honesty guard, the ledger, and field answering. The end-to-end tests spin up local application forms and drive a real browser through them with a fake model: the happy path submits, an unanswerable required question blocks submission, a captcha blocks submission, dry run never clicks submit, and the full pipeline applies once and dedupes on the second run.
+67 tests: unit tests (URL parsing, ATS mapping, hard rules, honesty guard, ledger, form answers, local dates), RAG tests (requirement extraction, retrieval, Cohere Embed/Rerank request shapes, vector cache), provider tests (Cohere Command structured output and fallbacks), and end-to-end tests that drive a real browser through local and sandbox employer forms: submit, captcha stop, unanswerable-question stop, Ashby hand-off, dry run, duplicates, daily cap, a browser that won't start, and the ledger surviving a restart.
+
+```bash
+npm run eval              # deterministic eval suites → evals/RESULTS.md
+npm run eval -- --llm     # + fit scoring with your model key
+```
 
 ## Limits, honestly
 
