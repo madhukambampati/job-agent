@@ -103,13 +103,24 @@ function extractionSuite(): SuiteResult {
 
 // ---- 3. retrieval ----------------------------------------------------------------
 async function retrievalSuite(embedder: Embedder, reranker: Reranker | null, floors: Record<string, number>): Promise<SuiteResult> {
-  const data = JSON.parse(readFileSync("evals/retrieval.json", "utf8")) as { cases: { query: string; relevant: string[]; none?: boolean; paraphrase?: boolean }[] };
+  const data = JSON.parse(readFileSync("evals/retrieval.json", "utf8")) as { cases: { query: string; relevant: string[]; none?: boolean; paraphrase?: boolean; heldout?: boolean }[] };
   const r = new EvidenceRetriever(resumeChunks(resume), embedder, reranker);
   let hit1 = 0, rec3 = 0, mrr = 0, para = 0, paraHit = 0, pos = 0, posSupported = 0, neg = 0, negUnsupported = 0;
   const notes: string[] = [];
+  // Top score per case, kept so the "supported" threshold can be calibrated on both sides
+  // (true evidence vs no evidence) instead of guessed.
+  const posScores: number[] = [], negScores: number[] = [];
+  let hoPos = 0, hoPosSupported = 0, hoNeg = 0, hoNegUnsupported = 0;
   for (const c of data.cases) {
     const [m] = await r.match([{ text: c.query, mustHave: true }]);
+    const top = m.hits[0]?.score ?? 0;
+    if (c.heldout) {
+      if (c.none) { hoNeg++; if (!m.supported) hoNegUnsupported++; else notes.push(`held-out: claimed evidence for "${c.query}" (${top})`); }
+      else { hoPos++; if (m.supported) hoPosSupported++; else notes.push(`held-out: below threshold for "${c.query}" (${top})`); }
+      continue;
+    }
     if (c.none) {
+      negScores.push(top);
       neg++;
       if (!m.supported) negUnsupported++;
       else notes.push(`claimed evidence for "${c.query}": ${m.hits[0].chunkId} (${m.hits[0].score})`);
@@ -117,6 +128,7 @@ async function retrievalSuite(embedder: Embedder, reranker: Reranker | null, flo
     }
     pos++;
     if (m.supported) posSupported++;
+    if (c.relevant.includes(m.hits[0]?.chunkId ?? "")) posScores.push(top);
     const ids = m.hits.map((h) => h.chunkId);
     const rank = ids.findIndex((id) => c.relevant.includes(id));
     if (rank === 0) hit1++;
@@ -126,7 +138,7 @@ async function retrievalSuite(embedder: Embedder, reranker: Reranker | null, flo
   }
   return {
     suite: `Evidence retrieval (${r.description})`,
-    setup: `${pos} requirements with evidence (${para} paraphrased) + ${neg} with none, example résumé`,
+    setup: `${pos} requirements with evidence (${para} paraphrased) + ${neg} with none, plus ${hoPos + hoNeg} held-out, example résumé`,
     metrics: {
       "hit@1 %": pct(hit1 / pos),
       "recall@3 %": pct(rec3 / pos),
@@ -134,10 +146,23 @@ async function retrievalSuite(embedder: Embedder, reranker: Reranker | null, flo
       "paraphrase recall@3 %": pct(paraHit / para),
       "supported when evidence exists %": pct(posSupported / pos),
       "'no evidence' correctly reported %": pct(negUnsupported / neg),
+      "held-out: supported when evidence exists %": pct(hoPosSupported / hoPos),
+      "held-out: 'no evidence' correctly reported %": pct(hoNegUnsupported / hoNeg),
     },
     floors,
-    notes,
+    notes: [...notes, calibrationNote(posScores, negScores)],
   };
+}
+
+/** Where the threshold could sit: between the highest no-evidence score and the lowest correct #1 score. */
+function calibrationNote(posScores: number[], negScores: number[]): string {
+  const r = (x: number) => Math.round(x * 1000) / 1000;
+  const minPos = Math.min(...posScores), maxNeg = Math.max(...negScores);
+  const sorted = [...posScores].sort((a, b) => a - b).map(r);
+  const verdict = minPos > maxNeg
+    ? `separable: any threshold in (${r(maxNeg)}, ${r(minPos)}] keeps every no-evidence case unsupported and supports every correct #1 hit`
+    : `overlap: ${posScores.filter((x) => x <= maxNeg).length} correct #1 hits score at or below the best no-evidence score`;
+  return `calibration: correct #1 scores [${sorted.join(", ")}]; no-evidence max ${r(maxNeg)} (all: ${negScores.map(r).join(", ")}); ${verdict}`;
 }
 
 // ---- 4. form answers (sandbox employer, real browser) ---------------------------
@@ -230,10 +255,17 @@ async function main() {
   const results: SuiteResult[] = [honestySuite(), extractionSuite()];
   results.push(await retrievalSuite(new LocalEmbedder(), null, { "recall@3 %": 85, "'no evidence' correctly reported %": 80 }));
   if (process.env.COHERE_API_KEY) {
-    results.push(await retrievalSuite(new CohereEmbedder(process.env.COHERE_API_KEY), new CohereReranker(process.env.COHERE_API_KEY), {}));
+    try {
+      results.push(await retrievalSuite(new CohereEmbedder(process.env.COHERE_API_KEY), new CohereReranker(process.env.COHERE_API_KEY), {}));
+    } catch (e) {
+      // A network or rate-limit error here shouldn't throw away every other suite's results.
+      console.log(`· Cohere retrieval suite failed: ${(e as Error).message}`);
+    }
   } else console.log("· Cohere retrieval suite skipped (no COHERE_API_KEY)");
   if (!args.has("--no-browser")) results.push(await formsSuite());
-  if (args.has("--llm")) results.push(await fitSuite());
+  if (args.has("--llm")) {
+    try { results.push(await fitSuite()); } catch (e) { console.log(`· fit suite failed: ${(e as Error).message}`); }
+  }
   else console.log("· fit suite skipped (add --llm; uses your API key)");
 
   const failures: string[] = [];

@@ -1,26 +1,208 @@
 {
-  "about": "Requirements as they appear in postings, with the evidence chunks in config/resume.example.md that a human would point to. 'none' cases have no real evidence and should come back unsupported. 'paraphrase' cases share few words with the evidence, which is where embeddings should beat keyword matching.",
+  "about": "Requirements as they appear in postings, with the evidence chunks in config/resume.example.md that a human would point to. 'none' cases have no real evidence and should come back unsupported. 'paraphrase' cases share few words with the evidence, which is where embeddings should beat keyword matching. 'heldout' cases were written before the threshold was calibrated and are never used to pick it; they check whether the chosen threshold generalises.",
   "cases": [
-    { "query": "Experience with Playwright or Cypress and TypeScript", "relevant": ["r1.b1", "skills.1", "skills.2"] },
-    { "query": "Build evaluation harnesses for LLM features", "relevant": ["r1.b2", "skills.4"] },
-    { "query": "CI/CD pipelines such as GitHub Actions or Jenkins", "relevant": ["r1.b3", "skills.3"] },
-    { "query": "REST API testing and contract validation", "relevant": ["r2.b1"] },
-    { "query": "Python test automation with pytest", "relevant": ["r2.b1", "skills.2"] },
-    { "query": "Mobile testing on Android and iOS", "relevant": ["r2.b2"] },
-    { "query": "Golden datasets and LLM-as-judge evaluation", "relevant": ["skills.4", "r1.b2"] },
-    { "query": "Experience with Docker", "relevant": ["skills.3"] },
-    { "query": "Catching breaking API changes before release", "relevant": ["r2.b1"] },
-    { "query": "Dealing with flaky tests", "relevant": ["r1.b3"] },
-    { "query": "Keep the build pipeline green and fast", "relevant": ["r1.b3", "r1.b1"], "paraphrase": true },
-    { "query": "Assess the quality of generative model outputs", "relevant": ["r1.b2", "skills.4"], "paraphrase": true },
-    { "query": "Make sure our apps work on phones", "relevant": ["r2.b2"], "paraphrase": true },
-    { "query": "Write automated checks for web user interfaces", "relevant": ["r1.b1", "skills.1"], "paraphrase": true },
-    { "query": "Reduce the time it takes to run the full regression", "relevant": ["r1.b1"], "paraphrase": true },
-    { "query": "Kubernetes operators written in Go", "relevant": [], "none": true },
-    { "query": "Managing a team of 6+ QA engineers", "relevant": [], "none": true },
-    { "query": "PCI DSS compliance testing", "relevant": [], "none": true },
-    { "query": "Active government security clearance", "relevant": [], "none": true },
-    { "query": "Bazel build systems", "relevant": [], "none": true },
-    { "query": "Salesforce administration", "relevant": [], "none": true }
+    {
+      "query": "Experience with Playwright or Cypress and TypeScript",
+      "relevant": [
+        "r1.b1",
+        "skills.1",
+        "skills.2"
+      ]
+    },
+    {
+      "query": "Build evaluation harnesses for LLM features",
+      "relevant": [
+        "r1.b2",
+        "skills.4"
+      ]
+    },
+    {
+      "query": "CI/CD pipelines such as GitHub Actions or Jenkins",
+      "relevant": [
+        "r1.b3",
+        "skills.3"
+      ]
+    },
+    {
+      "query": "REST API testing and contract validation",
+      "relevant": [
+        "r2.b1"
+      ]
+    },
+    {
+      "query": "Python test automation with pytest",
+      "relevant": [
+        "r2.b1",
+        "skills.2"
+      ]
+    },
+    {
+      "query": "Mobile testing on Android and iOS",
+      "relevant": [
+        "r2.b2"
+      ]
+    },
+    {
+      "query": "Golden datasets and LLM-as-judge evaluation",
+      "relevant": [
+        "skills.4",
+        "r1.b2"
+      ]
+    },
+    {
+      "query": "Experience with Docker",
+      "relevant": [
+        "skills.3"
+      ]
+    },
+    {
+      "query": "Catching breaking API changes before release",
+      "relevant": [
+        "r2.b1"
+      ]
+    },
+    {
+      "query": "Dealing with flaky tests",
+      "relevant": [
+        "r1.b3"
+      ]
+    },
+    {
+      "query": "Keep the build pipeline green and fast",
+      "relevant": [
+        "r1.b3",
+        "r1.b1"
+      ],
+      "paraphrase": true
+    },
+    {
+      "query": "Assess the quality of generative model outputs",
+      "relevant": [
+        "r1.b2",
+        "skills.4"
+      ],
+      "paraphrase": true
+    },
+    {
+      "query": "Make sure our apps work on phones",
+      "relevant": [
+        "r2.b2"
+      ],
+      "paraphrase": true
+    },
+    {
+      "query": "Write automated checks for web user interfaces",
+      "relevant": [
+        "r1.b1",
+        "skills.1"
+      ],
+      "paraphrase": true
+    },
+    {
+      "query": "Reduce the time it takes to run the full regression",
+      "relevant": [
+        "r1.b1"
+      ],
+      "paraphrase": true
+    },
+    {
+      "query": "Kubernetes operators written in Go",
+      "relevant": [],
+      "none": true
+    },
+    {
+      "query": "Managing a team of 6+ QA engineers",
+      "relevant": [],
+      "none": true
+    },
+    {
+      "query": "PCI DSS compliance testing",
+      "relevant": [],
+      "none": true
+    },
+    {
+      "query": "Active government security clearance",
+      "relevant": [],
+      "none": true
+    },
+    {
+      "query": "Bazel build systems",
+      "relevant": [],
+      "none": true
+    },
+    {
+      "query": "Salesforce administration",
+      "relevant": [],
+      "none": true
+    },
+    {
+      "query": "Cross-browser end-to-end tests for our web app",
+      "relevant": [
+        "r1.b1",
+        "skills.1"
+      ],
+      "heldout": true
+    },
+    {
+      "query": "Measure whether chatbot answers are safe and on-topic",
+      "relevant": [
+        "r1.b2",
+        "skills.4"
+      ],
+      "heldout": true
+    },
+    {
+      "query": "Run tests in parallel to speed up CI",
+      "relevant": [
+        "r1.b3"
+      ],
+      "heldout": true
+    },
+    {
+      "query": "Validate backend services and their schemas",
+      "relevant": [
+        "r2.b1"
+      ],
+      "heldout": true
+    },
+    {
+      "query": "Test automation for native mobile apps",
+      "relevant": [
+        "r2.b2",
+        "skills.1"
+      ],
+      "heldout": true
+    },
+    {
+      "query": "Test AI agents that call tools",
+      "relevant": [
+        "skills.4"
+      ],
+      "heldout": true
+    },
+    {
+      "query": "Rust and embedded firmware development",
+      "relevant": [],
+      "none": true,
+      "heldout": true
+    },
+    {
+      "query": "Owning a P&L budget",
+      "relevant": [],
+      "none": true,
+      "heldout": true
+    },
+    {
+      "query": "Terraform infrastructure as code",
+      "relevant": [],
+      "none": true,
+      "heldout": true
+    },
+    {
+      "query": "SOC 2 audit evidence collection",
+      "relevant": [],
+      "none": true,
+      "heldout": true
+    }
   ]
 }
