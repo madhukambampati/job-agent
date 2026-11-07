@@ -59,14 +59,16 @@ Each agent has its own prompt, inputs and typed output (JSON-schema structured o
 | Honesty guard | 26 fabricated + 13 legitimate edits | **100%** invented tools/numbers caught · **96%** of all fabrications · **0%** legit edits rejected |
 | Requirement extraction | 17 postings | **100%** precision / recall |
 | Evidence retrieval, offline TF-IDF | 15 requirements with evidence + 6 without | recall@3 **87%** · paraphrases **60%** · "no evidence" reported correctly **100%** |
-| Evidence retrieval, Cohere Embed + Rerank | same | run `npm run eval` with `COHERE_API_KEY` |
+| Evidence retrieval, Cohere Embed v4 + Rerank v3.5 | same | hit@1 **93%** · recall@3 **100%** · paraphrases **100%** · "no evidence" reported correctly **100%** |
 | Form answers (real browser) | 16 sandbox employer forms | **100%** known fields correct · **100%** unanswerable questions left blank · **100%** captcha/unanswerable runs stopped for a human |
-| Fit scoring | 8 labelled postings | run `npm run eval -- --llm` |
+| Fit scoring (Claude) | 8 labelled postings | **88%** in the expected band · **74%** of pairs ranked in the right order |
 
 What the evals found and what's still open:
 
 - The first run showed the guard missed **scope inflation** ("Managed the team that built…", "company-wide", "used by 2 million people"). A scope/scale rule fixed those; held-out cases written afterwards check it generalises (3 of 4 caught). *"Became the go-to expert for LLM testing"* still gets through, and is reported rather than hidden.
-- Offline retrieval handles shared vocabulary but misses paraphrases ("make sure our apps work on phones" → the Appium bullet). That's the case semantic embeddings are for.
+- Offline retrieval handles shared vocabulary but misses paraphrases ("make sure our apps work on phones" → the Appium bullet). Cohere Embed + Rerank finds all of them: paraphrase recall@3 went from 60% to 100%.
+- But retrieval finding the right bullet isn't the same as the system using it. With Cohere, 5 of 15 requirements have the right bullet ranked first yet score under the 0.35 "supported" threshold (rerank scores 0.05 to 0.17), so they're shown as unsupported. That's the safe direction for an honesty-first tool, but too strict. Next step: log scores for the no-evidence cases too and calibrate the threshold on both sides instead of guessing.
+- Fit scoring over-scores one posting where mentoring and two nice-to-haves are missing (8 instead of mid).
 - The fit and Cohere suites call paid APIs, so they're opt-in rather than in CI. Fit labels are the maintainer's, on synthetic postings: a direction check, not a benchmark.
 
 ## Screens
