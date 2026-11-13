@@ -165,6 +165,7 @@
     <a class="nav" href="#needs" data-v="needs">✋ Needs you <span class="badge" id="needsBadge" hidden></span></a>
     <a class="nav" href="#profile" data-v="profile">👤 Profile</a>
     <div class="meta" id="meta"></div>
+    <a class="nav" href="#" id="logout" hidden>🚪 Sign out</a>
   </nav>
   <main>
     <div class="sandbar" id="sandbar" hidden></div>
@@ -646,6 +647,15 @@ loadConfig().catch(() => {});
 refreshApps();
 show(location.hash.slice(1) || "find");
 $("#q").focus();
+
+// Hosted mode only: /api/auth/me exists there, so show Sign out.
+fetch("/api/auth/me").then((r) => (r.ok ? r.json() : null)).then((me) => {
+  if (!me) return;
+  const l = document.getElementById("logout");
+  l.hidden = false;
+  l.title = me.email;
+  l.onclick = async (e) => { e.preventDefault(); await fetch("/api/auth/logout", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" }); location.href = "/login"; };
+}).catch(() => {});
 </script>
 </body>
 </html>

@@ -12,12 +12,13 @@
     "test": "vitest run",
     "dev": "tsx src/cli.ts",
     "ui": "tsx src/ui/server.ts",
+    "hosted": "tsx src/hosted/server.ts",
     "demo": "tsx src/sandbox/run.ts --offline",
     "sandbox": "tsx src/sandbox/run.ts",
     "eval": "tsx src/evals/run.ts"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22.13"
   },
   "license": "MIT",
   "dependencies": {

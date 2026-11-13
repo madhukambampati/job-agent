@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>job-agent: sign in</title>
+<style>
+  :root { --ink:#14213d; --navy:#1F3864; --muted:#5b6475; --line:#e3e6ec; --paper:#f5f4f0; --red:#b4232c; --red-bg:#fbe8e9; --green:#1f7a4d; --green-bg:#e3f3ea; }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  body { margin:0; font:14.5px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Inter,sans-serif; color:var(--ink); background:var(--paper); }
+  .wrap { max-width:640px; margin:0 auto; padding:40px 20px 80px; }
+  .brand { font-weight:700; font-size:20px; color:var(--navy); margin-bottom:4px; }
+  .tag { color:var(--muted); margin:0 0 24px; }
+  .card { background:#fff; border:1px solid var(--line); border-radius:12px; padding:22px; }
+  h2 { margin:0 0 14px; font-size:18px; }
+  label { display:block; font-weight:600; font-size:13px; margin:12px 0 4px; }
+  label small { font-weight:400; color:var(--muted); }
+  input, select, textarea { width:100%; font:inherit; border:1px solid var(--line); border-radius:8px; padding:8px 10px; color:var(--ink); background:#fff; }
+  textarea { min-height:260px; font-family:ui-monospace,Menlo,Consolas,monospace; font-size:12.5px; }
+  .row { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  .check { display:flex; gap:8px; align-items:flex-start; font-weight:500; margin-top:12px; }
+  .check input { width:auto; margin-top:4px; }
+  button { font:inherit; font-weight:600; font-size:14px; border:1px solid var(--navy); background:#fff; color:var(--navy); border-radius:8px; padding:9px 16px; cursor:pointer; }
+  button.primary { background:var(--navy); color:#fff; }
+  button:disabled { opacity:.5; }
+  .tabs { display:flex; gap:6px; margin-bottom:14px; }
+  .tabs button { border-color:var(--line); color:var(--muted); }
+  .tabs button.on { border-color:var(--navy); color:var(--navy); background:#eef2f9; }
+  .err { background:var(--red-bg); color:var(--red); border-radius:8px; padding:8px 10px; margin-top:12px; }
+  .ok { background:var(--green-bg); color:var(--green); border-radius:8px; padding:8px 10px; margin-top:12px; }
+  .hint { color:var(--muted); font-size:13px; margin-top:6px; }
+  .steps { display:flex; gap:8px; margin-bottom:14px; font-size:13px; color:var(--muted); }
+  .steps b { color:var(--navy); }
+  .actions { display:flex; gap:10px; margin-top:18px; align-items:center; }
+  pre { background:#f5f4f0; border-radius:8px; padding:10px; font-size:12px; overflow:auto; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="brand">job-agent</div>
+  <p class="tag">Finds roles, tailors your résumé from your own evidence, and never claims experience you don't have.</p>
+
+  <!-- Sign in / sign up -->
+  <div class="card" id="auth" hidden>
+    <div class="tabs"><button type="button" id="tabIn" class="on">Sign in</button><button type="button" id="tabUp">Create account</button></div>
+    <form id="authForm">
+      <label for="email">Email</label><input id="email" type="email" autocomplete="email" required>
+      <label for="pw">Password <small id="pwHint" hidden>(at least 10 characters)</small></label><input id="pw" type="password" autocomplete="current-password" required>
+      <div class="err" id="authErr" hidden></div>
+      <div class="actions"><button class="primary" id="authBtn">Sign in</button></div>
+    </form>
+  </div>
+
+  <!-- Onboarding -->
+  <div id="onb" hidden>
+    <div class="steps"><span id="s1"><b>1.</b> Your details</span> <span>→</span> <span id="s2">2. Your résumé</span></div>
+
+    <div class="card" id="stepProfile">
+      <h2>Your details</h2>
+      <p class="hint" style="margin-top:0">Used to fill employer forms. Everything is yours alone and never shared with other accounts.</p>
+      <form id="profForm">
+        <div class="row"><div><label>First name</label><input name="firstName" required></div><div><label>Last name</label><input name="lastName" required></div></div>
+        <div class="row"><div><label>Email on applications</label><input name="email" type="email" required></div><div><label>Phone</label><input name="phone" required></div></div>
+        <div class="row"><div><label>City</label><input name="city" required></div><div><label>Province / state</label><input name="region" required></div></div>
+        <div class="row"><div><label>Country</label><input name="country" required></div><div><label>Postal code <small>(optional)</small></label><input name="postalCode"></div></div>
+        <div class="row"><div><label>Current title</label><input name="currentTitle"></div><div><label>Current company</label><input name="currentCompany"></div></div>
+        <div class="row"><div><label>Years of experience</label><input name="yearsOfExperience" type="number" min="0" max="60" step="1" required></div><div><label>LinkedIn <small>(optional)</small></label><input name="linkedin"></div></div>
+        <div class="row"><div><label>GitHub <small>(optional)</small></label><input name="github"></div><div><label>Website <small>(optional)</small></label><input name="website"></div></div>
+        <label>Countries you're authorised to work in <small>(comma separated)</small></label><input name="authorizedCountries" required placeholder="Canada">
+        <label class="check"><input type="checkbox" name="requiresSponsorship"> I will need visa sponsorship</label>
+        <div class="row"><div><label>Minimum salary <small>(roles that top out below are skipped)</small></label><input name="salaryFloor" type="number" min="0" step="1000" required></div><div><label>Currency</label><input name="currency" value="CAD" required></div></div>
+        <label>"Expected salary" answer on forms</label><input name="salaryExpected" required placeholder="120,000 CAD">
+        <label class="check"><input type="checkbox" name="remoteOnly" checked> Remote roles only</label>
+        <label>Other places that are OK <small>(comma separated, optional)</small></label><input name="acceptableLocations" placeholder="Toronto, Kitchener">
+        <label>Skip titles containing <small>(comma separated)</small></label><input name="excludeTitleKeywords" value="intern, junior">
+        <div class="row"><div><label>Minimum fit score to apply (1-10)</label><input name="scoreThreshold" type="number" min="1" max="10" value="7" required></div><div><label>Max applications per day</label><input name="dailyCap" type="number" min="1" value="10" required></div></div>
+        <div class="row"><div><label>Notice period</label><input name="noticePeriod" value="2 weeks"></div><div></div></div>
+        <label class="check"><input type="checkbox" name="autoSubmit"> Submit automatically when everything checks out <small>(leave off to review each one first)</small></label>
+        <div class="err" id="profErr" hidden></div>
+        <div class="actions"><button class="primary">Save and continue</button></div>
+      </form>
+    </div>
+
+    <div class="card" id="stepResume" hidden>
+      <h2>Your résumé</h2>
+      <p class="hint" style="margin-top:0">Paste it in this simple markdown shape. The tailoring agent can only reorder and reword <i>these</i> bullets, never add new claims.</p>
+      <pre># Your Name
+City, ST | you@example.com | +1 555 010 0000
+
+## Summary
+One short paragraph.
+
+## Skills
+- Automation: Playwright, Selenium
+
+## Experience
+### Title | Company | Location | Dates
+- A bullet about what you did.</pre>
+      <textarea id="resumeMd" spellcheck="false"></textarea>
+      <div class="err" id="resErr" hidden></div>
+      <div class="actions"><button type="button" id="back">Back</button><button class="primary" id="saveResume">Save and open job-agent</button></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const $ = (s) => document.querySelector(s);
+let mode = "in";
+
+async function api(method, url, body) {
+  const r = await fetch(url, { method, headers: { "content-type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) { const e = new Error(j.error || `Request failed (${r.status})`); e.status = r.status; throw e; }
+  return j;
+}
+const show = (el, msg) => { el.textContent = msg; el.hidden = !msg; };
+
+function setMode(m) {
+  mode = m;
+  $("#tabIn").classList.toggle("on", m === "in");
+  $("#tabUp").classList.toggle("on", m === "up");
+  $("#authBtn").textContent = m === "in" ? "Sign in" : "Create account";
+  $("#pwHint").hidden = m === "in";
+  $("#pw").autocomplete = m === "in" ? "current-password" : "new-password";
+  show($("#authErr"), "");
+}
+$("#tabIn").onclick = () => setMode("in");
+$("#tabUp").onclick = () => setMode("up");
+
+$("#authForm").onsubmit = async (e) => {
+  e.preventDefault();
+  $("#authBtn").disabled = true;
+  try {
+    await api("POST", mode === "in" ? "/api/auth/login" : "/api/auth/signup", { email: $("#email").value, password: $("#pw").value });
+    await route();
+  } catch (err) { show($("#authErr"), err.message); }
+  $("#authBtn").disabled = false;
+};
+
+const csv = (v) => String(v || "").split(",").map((x) => x.trim()).filter(Boolean);
+
+function profileFromForm(f) {
+  const g = (n) => f.elements[n];
+  return {
+    firstName: g("firstName").value.trim(), lastName: g("lastName").value.trim(), email: g("email").value.trim(), phone: g("phone").value.trim(),
+    city: g("city").value.trim(), region: g("region").value.trim(), country: g("country").value.trim(), postalCode: g("postalCode").value.trim(),
+    linkedin: g("linkedin").value.trim(), github: g("github").value.trim(), website: g("website").value.trim(),
+    currentCompany: g("currentCompany").value.trim(), currentTitle: g("currentTitle").value.trim(),
+    yearsOfExperience: Number(g("yearsOfExperience").value),
+    workAuthorization: { authorizedCountries: csv(g("authorizedCountries").value), requiresSponsorship: g("requiresSponsorship").checked },
+    salary: { floor: Number(g("salaryFloor").value), currency: g("currency").value.trim(), expected: g("salaryExpected").value.trim() },
+    search: { remoteOnly: g("remoteOnly").checked, acceptableLocations: csv(g("acceptableLocations").value), excludeEmploymentTypes: ["contract", "temporary", "fixed-term", "freelance", "internship"], excludeTitleKeywords: csv(g("excludeTitleKeywords").value) },
+    automation: { scoreThreshold: Number(g("scoreThreshold").value), autoSubmit: g("autoSubmit").checked, dailyCap: Number(g("dailyCap").value), noticePeriod: g("noticePeriod").value.trim() || "2 weeks", willingToRelocate: false },
+    answers: (window.__answers || {}),
+  };
+}
+
+function fillForm(f, p) {
+  const set = (n, v) => { if (v !== undefined && v !== null) f.elements[n].value = v; };
+  ["firstName", "lastName", "email", "phone", "city", "region", "country", "postalCode", "linkedin", "github", "website", "currentCompany", "currentTitle", "yearsOfExperience"].forEach((k) => set(k, p[k]));
+  set("authorizedCountries", (p.workAuthorization?.authorizedCountries || []).join(", "));
+  f.elements.requiresSponsorship.checked = !!p.workAuthorization?.requiresSponsorship;
+  set("salaryFloor", p.salary?.floor); set("currency", p.salary?.currency); set("salaryExpected", p.salary?.expected);
+  f.elements.remoteOnly.checked = p.search?.remoteOnly !== false;
+  set("acceptableLocations", (p.search?.acceptableLocations || []).join(", "));
+  set("excludeTitleKeywords", (p.search?.excludeTitleKeywords || []).join(", "));
+  set("scoreThreshold", p.automation?.scoreThreshold); set("dailyCap", p.automation?.dailyCap); set("noticePeriod", p.automation?.noticePeriod);
+  f.elements.autoSubmit.checked = !!p.automation?.autoSubmit;
+  window.__answers = p.answers || {};
+}
+
+let onboarding = null;
+function step(n) { $("#stepProfile").hidden = n !== 1; $("#stepResume").hidden = n !== 2; $("#s1").style.fontWeight = n === 1 ? 700 : 400; $("#s2").style.fontWeight = n === 2 ? 700 : 400; }
+
+$("#profForm").onsubmit = async (e) => {
+  e.preventDefault();
+  try {
+    await api("PUT", "/api/onboarding/profile", profileFromForm(e.target));
+    show($("#profErr"), ""); step(2);
+  } catch (err) { show($("#profErr"), err.message); }
+};
+$("#back").onclick = () => step(1);
+$("#saveResume").onclick = async () => {
+  try {
+    await api("PUT", "/api/onboarding/resume", { markdown: $("#resumeMd").value });
+    location.href = "/";
+  } catch (err) { show($("#resErr"), err.message); }
+};
+
+async function route() {
+  let me;
+  try { me = await api("GET", "/api/auth/me"); } catch { $("#auth").hidden = false; $("#onb").hidden = true; setMode(location.pathname === "/signup" ? "up" : "in"); return; }
+  if (me.onboarded) { location.href = "/"; return; }
+  onboarding = await api("GET", "/api/onboarding");
+  $("#auth").hidden = true; $("#onb").hidden = false;
+  const f = $("#profForm");
+  if (onboarding.profile) fillForm(f, onboarding.profile);
+  else { f.elements.email.value = me.email; f.elements.dailyCap.max = onboarding.maxDailyCap; }
+  $("#resumeMd").value = onboarding.resumeMarkdown || "";
+  step(onboarding.profile ? 2 : 1);
+}
+route();
+</script>
+</body>
+</html>

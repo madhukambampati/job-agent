@@ -71,6 +71,16 @@ What the evals found and what's still open:
 - Fit scoring over-scores one posting where mentoring and two nice-to-haves are missing (8 instead of mid).
 - The fit and Cohere suites call paid APIs, so they're opt-in rather than in CI. Fit labels are the maintainer's, on synthetic postings: a direction check, not a benchmark.
 
+## Hosted mode (multiple accounts)
+
+```bash
+npm run hosted          # http://127.0.0.1:3000  (JOB_AGENT_HOST / PORT to change)
+```
+
+Accounts, sessions and each user's profile + résumé live in SQLite (`data/hosted.sqlite`, Node >= 22.13). Every signed-in user gets their own app instance with their own ledger, generated documents and evidence notes under `data/users/<id>/`, so nothing is shared between people. Passwords are scrypt-hashed, sessions are random tokens stored hashed, writes must be JSON (blocks cross-site form posts), and users can't raise their daily cap above 25.
+
+Env: `JOB_AGENT_SECURE_COOKIES=1` behind HTTPS, `JOB_AGENT_SIGNUPS=closed` for invite-only, `JOB_AGENT_DB` for the database path. Not done yet: Postgres, email verification, billing, a global limit on concurrent browsers, and per-user API-cost caps. Put it behind HTTPS and a reverse proxy before exposing it.
+
 ## Screens
 
 | | |
